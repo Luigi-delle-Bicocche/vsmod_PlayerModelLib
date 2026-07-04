@@ -294,6 +294,8 @@ public sealed class CustomModelsSystem : ModSystem
 
         CustomModelData defaultModelData = new(_defaultModelCode, defaultShape)
         {
+            OriginalConfig = defaultConfig,
+
             SkinParts = partsByCode,
             SkinPartsArray = parts,
             ShapePath = _defaultModelPath,
@@ -420,6 +422,8 @@ public sealed class CustomModelsSystem : ModSystem
 
         CustomModelData modelData = new(code, shape)
         {
+            OriginalConfig = modelConfig,
+
             Enabled = modelConfig.Enabled,
             Name = modelConfig.Name,
             ShapePath = modelConfig.ShapePath,

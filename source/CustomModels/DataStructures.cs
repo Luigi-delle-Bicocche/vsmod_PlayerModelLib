@@ -95,6 +95,67 @@ public class CustomModelConfig
     public float StepHeight { get; set; } = 0.6f;
     public float MaxOxygenFactor { get; set; } = 1;
     public bool CreateCuboidsForAttachmentPoints { get; set; } = true;
+
+    public CustomModelConfig Clone()
+    {
+        return new CustomModelConfig
+        {
+            Enabled = Enabled,
+            Name = Name,
+            Domain = Domain,
+            Group = Group,
+            Icon = Icon,
+            GroupIcon = GroupIcon,
+            ShapePath = ShapePath,
+            BaseShapeCode = BaseShapeCode,
+
+            // Copy by ref, @TODO fix later
+            SkinnableParts = SkinnableParts,
+
+            // Deep copy dictionaries
+            WearableModelReplacers = new Dictionary<string, string>(WearableModelReplacers),
+            WearableCompositeModelReplacers = WearableCompositeModelReplacers
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone()),
+            WearableModelReplacersByShape = new Dictionary<string, string>(WearableModelReplacersByShape),
+            DisabledElementsByShape = DisabledElementsByShape
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToArray()),
+            EnabledElementsByShape = EnabledElementsByShape
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToArray()),
+
+            // Deep copy list
+            AnimationsMetaData = AnimationsMetaData
+                .Select(anim => anim.Clone())
+                .ToList(),
+
+            // Deep copy arrays
+            AvailableClasses = AvailableClasses.ToArray(),
+            SkipClasses = SkipClasses.ToArray(),
+            ExtraTraits = ExtraTraits.ToArray(),
+            ExclusiveClasses = ExclusiveClasses.ToArray(),
+            CollisionBox = CollisionBox.ToArray(),
+            MaxCollisionBox = MaxCollisionBox.ToArray(),
+            MinCollisionBox = MinCollisionBox.ToArray(),
+            AddTags = AddTags.ToArray(),
+            RemoveTags = RemoveTags.ToArray(),
+            SizeRange = SizeRange.ToArray(),
+
+            // Value types (copied by value)
+            EyeHeight = EyeHeight,
+            ScaleColliderWithSizeHorizontally = ScaleColliderWithSizeHorizontally,
+            ScaleColliderWithSizeVertically = ScaleColliderWithSizeVertically,
+            MaxEyeHeight = MaxEyeHeight,
+            MinEyeHeight = MinEyeHeight,
+            ModelSizeFactor = ModelSizeFactor,
+            HeadBobbingScale = HeadBobbingScale,
+            GuiModelScale = GuiModelScale,
+            WalkEyeHeightMultiplier = WalkEyeHeightMultiplier,
+            SprintEyeHeightMultiplier = SprintEyeHeightMultiplier,
+            SneakEyeHeightMultiplier = SneakEyeHeightMultiplier,
+            StepHeight = StepHeight,
+            MaxOxygenFactor = MaxOxygenFactor,
+            CreateCuboidsForAttachmentPoints = CreateCuboidsForAttachmentPoints
+        };
+    }
 }
 
 public class CustomModelData
@@ -140,6 +201,8 @@ public class CustomModelData
     public float StepHeight { get; set; } = 0.6f;
     public float MaxOxygenFactor { get; set; } = 1;
     public bool CreateCuboidsForAttachmentPoints { get; set; } = true;
+
+    public CustomModelConfig? OriginalConfig { get; set; }
 
     public HashSet<string> AvailableClasses { get => PlayerModelModSystem.Settings.DisableModelClassesAndTraits ? [] : _availableClasses; set => _availableClasses = value; }
     public HashSet<string> SkipClasses { get => PlayerModelModSystem.Settings.DisableModelClassesAndTraits ? [] : _skipClasses; set => _skipClasses = value; }

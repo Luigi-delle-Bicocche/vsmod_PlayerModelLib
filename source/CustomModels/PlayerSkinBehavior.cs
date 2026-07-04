@@ -1,9 +1,10 @@
 ﻿using HarmonyLib;
+using Newtonsoft.Json;
 using OpenTK.Mathematics;
 using OverhaulLib.Utils;
 using System.Diagnostics;
-using System.Globalization;
 using System.Reflection;
+using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -400,7 +401,7 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
     public virtual void ApplyVoice(string voiceType, string voicePitch, bool testTalk)
     {
-        if (!AvailableSkinPartsByCode.TryGetValue("voicetype", out SkinnablePart? availVoices) || !AvailableSkinPartsByCode.TryGetValue("voicepitch", out _))
+        if (!AvailableSkinPartsByCode.TryGetValue("voicetype", out SkinnablePart? voices) || !AvailableSkinPartsByCode.TryGetValue("voicepitch", out _))
         {
             return;
         }
@@ -410,12 +411,12 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
         if (entity is EntityPlayer plr && plr.talkUtil != null && voiceType != null)
         {
-            if (!availVoices.VariantsByCode.ContainsKey(voiceType))
+            if (!voices.VariantsByCode.ContainsKey(voiceType))
             {
-                voiceType = availVoices.Variants[0].Code;
+                voiceType = voices.Variants[0].Code;
             }
 
-            plr.talkUtil.soundName = availVoices.VariantsByCode[voiceType].Sound;
+            plr.talkUtil.soundName = voices.VariantsByCode[voiceType].Sound;
 
             float pitchMod = 1;
             switch (VoicePitch)
@@ -435,6 +436,16 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
                 plr.talkUtil.Talk(EnumTalkType.Idle);
             }
         }
+    }
+
+    public virtual AssetLocation GetVoicePath()
+    {
+        if (!AvailableSkinPartsByCode.TryGetValue("voicetype", out SkinnablePart? voices) || !AvailableSkinPartsByCode.TryGetValue("voicepitch", out _))
+        {
+            return "";
+        }
+
+        return voices.VariantsByCode[VoiceType].Sound;
     }
 
     public virtual bool RandomizeSkin(Entity entity, Dictionary<string, string> preSelection, bool playVoice = true)
@@ -580,19 +591,74 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
         TexturePixels mainTexture = ProcessTextures(texutres, uvs, out Dictionary<UVForTexture, UVForTexture> uvReplacement);
 
-        ReplaceShapeUVs(shape, uvReplacement);
+        ReplaceShapeUVs(shape, uvReplacement, out List<(string, string, UVForTexture)> uvMap);
 
         shape.Textures.Clear();
-        shape.Textures["main-texture"] = "main-texture";
+        shape.Textures["main-texture"] = "custom-texture";
         shape.TextureSizes = [];
         shape.TextureWidth = (int)(mainTexture.Width / mainTexture.WidthUVFactor);
         shape.TextureHeight = (int)(mainTexture.Height / mainTexture.HeightUVFactor);
 
         BakedBitmap baked = new() { Width = mainTexture.Width, Height = mainTexture.Height, TexturePixels = mainTexture.Pixels };
-        TextureUtils.ExportBakedBitmapAsPng(baked, System.IO.Path.Combine(cpmModelFolder, "main-texture.png"));
+        TextureUtils.ExportBakedBitmapAsPng(baked, System.IO.Path.Combine(cpmModelFolder, "custom-texture.png"));
 
         string shapeFile = System.IO.Path.Combine(cpmModelFolder, "custom-shape.json");
         ShapeReplacementUtil.ExportShape(shape, shapeFile, attached: false);
+
+        string configFile = System.IO.Path.Combine(cpmModelFolder, "config.json");
+        ExportConfig(configFile);
+
+        string soundFile = System.IO.Path.Combine(cpmModelFolder, "custom-voice.ogg");
+        ExportSounds(soundFile);
+
+        string uvMapFile = System.IO.Path.Combine(cpmModelFolder, "uvs.csv");
+        ExportUvMap(uvMapFile, uvMap, mainTexture);
+    }
+
+    protected void ExportUvMap(string file, List<(string, string, UVForTexture)> uvMap, TexturePixels texture)
+    {
+        StringBuilder fileContent = new();
+        fileContent.AppendLine("element,face,X1,Y1,X2,Y2");
+        foreach ((string element, string face, UVForTexture uv) in uvMap)
+        {
+            fileContent.AppendLine($"{element},{face},{uv.UV.X * texture.WidthUVFactor},{uv.UV.Y * texture.HeightUVFactor},{uv.UV.Z * texture.WidthUVFactor},{uv.UV.W * texture.HeightUVFactor}");
+        }
+
+        FileInfo? fifo = new(file);
+        if (fifo.Directory == null) return;
+        GamePaths.EnsurePathExists(fifo.Directory.FullName);
+        File.WriteAllText(fifo.FullName, fileContent.ToString());
+    }
+
+    protected void ExportConfig(string file)
+    {
+        CustomModelConfig? config = CurrentModel.OriginalConfig?.Clone();
+        if (config == null) return;
+
+        config.SkinnableParts = [];
+
+        string configJson = JsonConvert.SerializeObject(config, Formatting.Indented);
+
+        FileInfo? fifo = new(file);
+        if (fifo.Directory == null) return;
+        GamePaths.EnsurePathExists(fifo.Directory.FullName);
+        File.WriteAllText(fifo.FullName, configJson);
+    }
+
+    protected void ExportSounds(string file)
+    {
+        AssetLocation voicePath = GetVoicePath().Clone();
+        voicePath.Path = voicePath.Path.Replace(".ogg", "");
+        voicePath.Path += ".ogg";
+        IAsset? voiceAsset = entity.Api.Assets.Get(voicePath);
+        if (voiceAsset == null) return;
+
+        byte[] data = voiceAsset.Data;
+
+        FileInfo? fifo = new(file);
+        if (fifo.Directory == null) return;
+        GamePaths.EnsurePathExists(fifo.Directory.FullName);
+        File.WriteAllBytes(fifo.FullName, data);
     }
 
     protected void WalkShapeElements(ShapeElement[] elements, Action<ShapeElement> action)
@@ -955,21 +1021,26 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         }
     }
 
-    protected void ReplaceShapeUVs(Shape shape, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    protected void ReplaceShapeUVs(Shape shape, Dictionary<UVForTexture, UVForTexture> uvReplacement, out List<(string, string, UVForTexture)> uvMap)
     {
+        uvMap = [];
         foreach (ShapeElement element in shape.Elements)
         {
-            ReaplceShapeElementsUVs(element, uvReplacement);
+            ReaplceShapeElementsUVs(element, uvReplacement, uvMap);
         }
     }
 
-    protected void ReaplceShapeElementsUVs(ShapeElement element, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    protected void ReaplceShapeElementsUVs(ShapeElement element, Dictionary<UVForTexture, UVForTexture> uvReplacement, List<(string, string, UVForTexture)> uvMap)
     {
         if (element.Faces != null)
         {
-            foreach ((_, ShapeElementFace? face) in element.Faces)
+            foreach ((string faceCode, ShapeElementFace? face) in element.Faces)
             {
-                ReaplceShapeFaceUVs(face, uvReplacement);
+                ReaplceShapeFaceUVs(face, uvReplacement, out UVForTexture? replacement);
+                if (replacement != null)
+                {
+                    uvMap.Add((element.Name ?? "", faceCode, replacement.Value));
+                }
             }
         }
 
@@ -977,13 +1048,15 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         {
             foreach (ShapeElement child in element.Children)
             {
-                ReaplceShapeElementsUVs(child, uvReplacement);
+                ReaplceShapeElementsUVs(child, uvReplacement, uvMap);
             }
         }
     }
 
-    protected void ReaplceShapeFaceUVs(ShapeElementFace face, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    protected void ReaplceShapeFaceUVs(ShapeElementFace face, Dictionary<UVForTexture, UVForTexture> uvReplacement, out UVForTexture? replacement)
     {
+        replacement = null;
+
         if (face.Texture == null || face.Uv == null) return;
 
         Vector4 faceOldUv = new(face.Uv[0], face.Uv[1], face.Uv[2], face.Uv[3]);
@@ -993,6 +1066,8 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         foreach ((UVForTexture oldUv, UVForTexture newUv) in uvReplacement)
         {
             if (oldUv.TextureCode != textureCode || oldUv.UV != faceOldUv) continue;
+
+            replacement = newUv;
 
             face.Texture = newUv.TextureCode;
             face.Uv[0] = newUv.UV.X;

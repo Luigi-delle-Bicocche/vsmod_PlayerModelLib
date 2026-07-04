@@ -801,7 +801,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         
         composer.AddButton(Lang.Get("Scroll bars mode toggle"), OnScrollBarModeToggle, scrollBarModeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
 
-        if (PlayerModelModSystem.Settings.ExportModelButton)
+        if (PlayerModelModSystem.Settings.ExportCPMModelButton)
         {
             composer.AddButton(Lang.Get("Export as CPM model"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         }
@@ -995,7 +995,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         composer.AddButton(Lang.Get("Folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         composer.AddButton(Lang.Get("Confirm Skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
 
-        if (PlayerModelModSystem.Settings.ExportModelButton)
+        if (PlayerModelModSystem.Settings.ExportCPMModelButton)
         {
             composer.AddButton(Lang.Get("Export as CPM model"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         }

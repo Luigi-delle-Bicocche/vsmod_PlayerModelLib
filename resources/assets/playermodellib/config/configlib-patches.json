@@ -154,10 +154,10 @@
       "default": false
     },
     {
-      "code": "export_model_button",
+      "code": "export_cpm_model_button",
       "type": "boolean",
       "ingui": "playermodellib:setting-export_model_button",
-      "default": false
+      "default": true
     }
   ]
 }
