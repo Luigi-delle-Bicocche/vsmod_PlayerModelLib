@@ -82,7 +82,7 @@ public static partial class ShapeReplacementUtil
             .ToArray();
     }
 
-    public static void ExportShape(Shape shape, string file)
+    public static void ExportShape(Shape shape, string file, bool attached = true)
     {
         try
         {
@@ -94,7 +94,9 @@ public static partial class ShapeReplacementUtil
             GamePaths.EnsurePathExists(fifo.Directory.FullName);
             string json = JsonConvert.SerializeObject(shape, Formatting.Indented);
 
-            FixShapeJson(ref json);
+            FixShapeJson(ref json, attached);
+
+            FixAnimations(shape, ref json);
 
             File.WriteAllText(fifo.FullName, json);
 
@@ -228,15 +230,70 @@ public static partial class ShapeReplacementUtil
             Log.Error(api, typeof(ShapeReplacementUtil), $"Error on exporting shape '{fileName}':\n{exception}\n");
         }
     }
-    private static void FixShapeJson(ref string json)
+    private static void FixShapeJson(ref string json, bool attached = true)
     {
-        json = "{\n \"editor\": {\"backDropShape\": \"\",\"entityTextureMode\": true}," + json[1..];
+        if (attached)
+        {
+            json = "{\n \"editor\": {\"backDropShape\": \"\",\"entityTextureMode\": true}," + json[1..];
+        }
+        else
+        {
+            json = "{\n \"editor\": {\"entityTextureMode\": true}," + json[1..];
+        }
+        
         LowercaseJsonKeys(ref json);
         TurnOffAutoUv(ref json);
         FixAnimationsEnums(ref json);
         FixNullValues(ref json);
         FixInvalidCommas(ref json);
-        json = json.Replace("keyFrames", "keyframes").Replace("quantityFrames", "quantityframes").Replace("game:", "");
+        json = json.Replace("keyFrames", "keyframes").Replace("quantityFrames", "quantityframes").Replace("game:", "").Replace("##", "#");
+    }
+    private static void FixAnimations(Shape shape, ref string json)
+    {
+        HashSet<string> existingElementNames = [];
+        WalkShapeElements(shape.Elements, element =>
+        {
+            existingElementNames.Add(element.Name ?? "");
+        });
+
+        Dictionary<string, string> replacements = [];
+
+        foreach (Animation? animation in shape.Animations)
+        {
+            if (animation.KeyFrames == null) continue;
+
+            foreach (AnimationKeyFrame frame in animation.KeyFrames)
+            {
+                if (frame.Elements == null) continue;
+
+                HashSet<string> missing = [];
+
+                foreach ((string code, _) in frame.Elements)
+                {
+                    if (existingElementNames.Contains(code))
+                    {
+                        string lowerKey = char.ToLowerInvariant(code[0]) + code[1..];
+                        replacements[lowerKey] = code;
+                    }
+                }
+            }
+        }
+
+        foreach ((string oldCode, string newCode) in replacements)
+        {
+            json = json.Replace(oldCode, newCode);
+        }
+    }
+    private static void WalkShapeElements(ShapeElement[] elements, Action<ShapeElement> action)
+    {
+        foreach (ShapeElement element in elements)
+        {
+            action.Invoke(element);
+            if (element.Children != null)
+            {
+                WalkShapeElements(element.Children, action);
+            }
+        }
     }
     private static void FixNullValues(ref string json)
     {

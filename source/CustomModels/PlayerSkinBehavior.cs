@@ -2,6 +2,7 @@
 using OpenTK.Mathematics;
 using OverhaulLib.Utils;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -129,6 +130,10 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
             if (entity.Api.Side == EnumAppSide.Server && !GetAppliedSkinParts().Any())
             {
                 RandomizeSkin(entity, [], false);
+            }
+            else
+            {
+                ValidateSkin();
             }
 
             ModelSystem.OnCustomModelHotLoaded += (code) =>
@@ -516,25 +521,39 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         string cpmModelFolder = System.IO.Path.Combine(GamePaths.ModConfig, "custom-player-models", CurrentModelCode.Replace(':', '-'));
 
         string prefix = CustomModelsSystem.GetTextureCodePrefix(CurrentModelCode);
+        string modelCode = CurrentModelCode.Replace(':', '-');
 
+        Dictionary<string, AssetLocation> replacedTextures = [];
         foreach ((string code, _) in shape.Textures)
         {
-            if (!code.StartsWith(CurrentModelCode.Replace(':', '-')))
+            if (!code.StartsWith(modelCode))
             {
-                shape.Textures[code] = prefix + code;
+                replacedTextures[prefix + code] = prefix + code;
             }
             else
             {
-                shape.Textures[code] = code;
+                replacedTextures[code] = code;
             }
         }
+        shape.Textures = replacedTextures;
 
         foreach ((string code, int[]? size) in shape.TextureSizes.ToList())
         {
-            if (!code.StartsWith(CurrentModelCode.Replace(':', '-')))
+            if (!code.StartsWith(modelCode))
             {
                 shape.TextureSizes[prefix + code] = size;
             }
+        }
+
+        foreach (ShapeElement? shapeElement in shape.Elements)
+        {
+            WalkFaces(shapeElement, face =>
+            {
+                if (!face.Texture.StartsWith(modelCode))
+                {
+                    face.Texture = prefix + face.Texture;
+                }
+            });
         }
 
         GamePaths.EnsurePathExists(cpmModelFolder);
@@ -553,25 +572,39 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         });
         List<UVForTexture> uvs = CollectShapeUVs(shape, prefix, CurrentModelCode.Replace(':', '-'));
 
-        ProcessTextures(ref texutres, ref uvs, out Dictionary<string, string> remaps);
-
-        foreach ((string textureCode, AssetLocation texturePath) in shape.Textures)
+        /*foreach ((string code, var texturePixels) in texutres)
         {
-            string path = texturePath.Path;
-            if (remaps.TryGetValue(path, out string? newCode))
-            {
-                shape.Textures[textureCode] = newCode;
-            }
-        }
+            BakedBitmap baked2 = new() { Width = texturePixels.Width, Height = texturePixels.Height, TexturePixels = texturePixels.Pixels };
+            TextureUtils.ExportBakedBitmapAsPng(baked2, System.IO.Path.Combine(cpmModelFolder, $"debug-{code}.png"));
+        }*/
 
-        foreach ((string textureCode, TexturePixels texture) in texutres)
-        {
-            BakedBitmap baked = new() { Width = texture.Width, Height = texture.Height, TexturePixels = texture.Pixels };
-            TextureUtils.ExportBakedBitmapAsPng(baked, System.IO.Path.Combine(cpmModelFolder, $"{textureCode}.png"));
-        }
+        TexturePixels mainTexture = ProcessTextures(texutres, uvs, out Dictionary<UVForTexture, UVForTexture> uvReplacement);
+
+        ReplaceShapeUVs(shape, uvReplacement);
+
+        shape.Textures.Clear();
+        shape.Textures["main-texture"] = "main-texture";
+        shape.TextureSizes = [];
+        shape.TextureWidth = (int)(mainTexture.Width / mainTexture.WidthUVFactor);
+        shape.TextureHeight = (int)(mainTexture.Height / mainTexture.HeightUVFactor);
+
+        BakedBitmap baked = new() { Width = mainTexture.Width, Height = mainTexture.Height, TexturePixels = mainTexture.Pixels };
+        TextureUtils.ExportBakedBitmapAsPng(baked, System.IO.Path.Combine(cpmModelFolder, "main-texture.png"));
 
         string shapeFile = System.IO.Path.Combine(cpmModelFolder, "custom-shape.json");
-        ShapeReplacementUtil.ExportShape(shape, shapeFile);
+        ShapeReplacementUtil.ExportShape(shape, shapeFile, attached: false);
+    }
+
+    protected void WalkShapeElements(ShapeElement[] elements, Action<ShapeElement> action)
+    {
+        foreach (ShapeElement element in elements)
+        {
+            action.Invoke(element);
+            if (element.Children != null)
+            {
+                WalkShapeElements(element.Children, action);
+            }
+        }
     }
 
     protected Vector2i GetTextureHalfSize(Shape shape, string textureCode)
@@ -584,33 +617,99 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         return new(shape.TextureWidth, shape.TextureHeight);
     }
 
-    protected void ProcessTextures(ref Dictionary<string, TexturePixels> textures, ref List<UVForTexture> uvs, out Dictionary<string, string> remaps)
+    protected TexturePixels ProcessTextures(Dictionary<string, TexturePixels> textures, List<UVForTexture> uvs, out Dictionary<UVForTexture, UVForTexture> uvReplacement)
     {
+        Dictionary<string, string> remaps = [];
         Stack<(TexturePixels uv, TexturePixels original)> uvZonesTextures = [];
         foreach ((string code, TexturePixels texture) in textures)
         {
             textures[code] = CutoutPixelsOutsideUvs(texture, uvs.Where(uv => uv.TextureCode == code), out TexturePixels uvTexture);
-            uvZonesTextures.Push((uvTexture, texture));
+            uvZonesTextures.Push((uvTexture, textures[code]));
         }
 
         /*string cpmModelFolder = System.IO.Path.Combine(GamePaths.ModConfig, "custom-player-models", CurrentModelCode.Replace(':', '-'));
-        foreach ((TexturePixels texture, TexturePixels original) in uvZonesTextures)
+        foreach ((string code, var texturePixels) in textures)
         {
-            BakedBitmap baked = new() { Width = texture.Width, Height = texture.Height, TexturePixels = texture.Pixels };
-            TextureUtils.ExportBakedBitmapAsPng(baked, System.IO.Path.Combine(cpmModelFolder, $"uv-{texture.Code}.png"));
+            BakedBitmap baked2 = new() { Width = texturePixels.Width, Height = texturePixels.Height, TexturePixels = texturePixels.Pixels };
+            TextureUtils.ExportBakedBitmapAsPng(baked2, System.IO.Path.Combine(cpmModelFolder, $"cutout-{code}.png"));
         }*/
 
         FindTexturesToCombine(uvZonesTextures, out Dictionary<string, string> combinations);
 
         remaps = combinations;
 
+        RescaleUVs(textures, uvs, combinations, out List<(UVForTexture, UVForTexture)> rescaledUvs);
+
         CombineTextures(ref textures, combinations);
 
-        for (int uvIndex = 0; uvIndex < uvs.Count; uvIndex++)
+        GlueTextures(textures, out TexturePixels combinedTexture, out Dictionary<string, UVRemap> uvRemaps);
+
+        uvReplacement = [];
+
+        foreach ((UVForTexture uv, UVForTexture rescaled) in rescaledUvs)
         {
-            if (combinations.TryGetValue(uvs[uvIndex].TextureCode, out string? newTextureCode))
+            remaps.TryGetValue(uv.TextureCode, out string? remappedCode);
+            remappedCode ??= uv.TextureCode;
+            if (uvRemaps.TryGetValue(remappedCode, out UVRemap remap))
             {
-                uvs[uvIndex] = new() { TextureCode = newTextureCode, UV = uvs[uvIndex].UV };
+                UVForTexture newUv = remap.Remap(rescaled);
+                uvReplacement[uv] = newUv;
+            }
+        }
+
+        return combinedTexture;
+    }
+
+    protected void RescaleUVs(Dictionary<string, TexturePixels> textures, List<UVForTexture> uvs, Dictionary<string, string> combinations, out List<(UVForTexture, UVForTexture)> rescaledUvs)
+    {
+        Dictionary<string, Vector2> rescaleFactors = [];
+        foreach ((string oldTextureCode, string newTextureCode) in combinations)
+        {
+            TexturePixels oldTexture = textures[oldTextureCode];
+            TexturePixels newTexture = textures[newTextureCode];
+            Vector2 rescaleFactor = new(oldTexture.WidthUVFactor / newTexture.WidthUVFactor, oldTexture.HeightUVFactor / newTexture.HeightUVFactor);
+            rescaleFactors.Add(oldTextureCode, rescaleFactor);
+        }
+
+        rescaledUvs = [];
+        foreach (UVForTexture uv in uvs)
+        {
+            if (!rescaleFactors.TryGetValue(uv.TextureCode, out Vector2 rescaleFactor))
+            {
+                rescaledUvs.Add((uv, uv));
+                continue;
+            }
+
+            UVForTexture rescaled = new()
+            {
+                TextureCode = uv.TextureCode,
+                UV = new(
+                    uv.UV.X * rescaleFactor.X,
+                    uv.UV.Y * rescaleFactor.Y,
+                    uv.UV.Z * rescaleFactor.X,
+                    uv.UV.W * rescaleFactor.Y
+                    )
+            };
+
+            rescaledUvs.Add((uv, rescaled));
+        }
+    }
+
+    protected void WalkFaces(ShapeElement element, Action<ShapeElementFace> action)
+    {
+        if (element.Faces != null)
+        {
+            foreach ((_, ShapeElementFace face) in element.Faces)
+            {
+                action.Invoke(face);
+            }
+        }
+
+        if (element.Children != null)
+        {
+            foreach (ShapeElement child in element.Children)
+            {
+                WalkFaces(child, action);
             }
         }
     }
@@ -630,6 +729,58 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
             }
 
             textures.Remove(childCode);
+        }
+    }
+
+    protected void GlueTextures(Dictionary<string, TexturePixels> textures, out TexturePixels texture, out Dictionary<string, UVRemap> uvRemaps)
+    {
+        texture = new()
+        {
+            Code = "main-texture",
+            Pixels = [],
+            WidthUVFactor = 2,
+            HeightUVFactor = 2
+        };
+
+        uvRemaps = [];
+
+        Dictionary<string, Vector2i> offsets = [];
+
+        foreach ((string textureCode, TexturePixels oldTexture) in textures)
+        {
+            Debug.WriteLine($"{textureCode} - ({oldTexture.WidthUVFactor}, {oldTexture.HeightUVFactor})");
+
+            UVRemap remap = new()
+            {
+                TextureCode = texture.Code,
+                Offset = new(0, texture.Height),
+                FromOldUvRescale = new(oldTexture.WidthUVFactor, oldTexture.HeightUVFactor),
+                ToNewUvRescale = new(1f / texture.WidthUVFactor, 1f / texture.HeightUVFactor)
+            };
+
+            uvRemaps.Add(textureCode, remap);
+
+            offsets.Add(textureCode, new(0, texture.Height));
+
+            texture.Width = Math.Max(oldTexture.Width, texture.Width);
+            texture.Height += oldTexture.Height;
+        }
+
+        texture.Pixels = new int[texture.Width * texture.Height];
+        foreach ((string textureCode, TexturePixels oldTexture) in textures)
+        {
+            Vector2i offset = offsets[textureCode];
+
+            for (int y = 0; y < oldTexture.Height; y++)
+            {
+                for (int x = 0; x < oldTexture.Width; x++)
+                {
+                    int oldIndex = y * oldTexture.Width + x;
+                    int newIndex = (y + offset.Y) * texture.Width + (x + offset.X);
+
+                    texture.Pixels[newIndex] = oldTexture.Pixels[oldIndex];
+                }
+            }
         }
     }
 
@@ -676,7 +827,7 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
         for (int pixelIndex = 0; pixelIndex < first.uv.Pixels.Length; pixelIndex++)
         {
-            if (first.uv.Pixels[pixelIndex] != 0 && second.uv.Pixels[pixelIndex] != 0)// && first.original.Pixels[pixelIndex] != second.original.Pixels[pixelIndex])
+            if (first.uv.Pixels[pixelIndex] != 0 && second.uv.Pixels[pixelIndex] != 0 && first.original.Pixels[pixelIndex] != second.original.Pixels[pixelIndex])
             {
                 return false;
             }
@@ -696,6 +847,12 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
         foreach (int pixel in uvPixels)
         {
+            if (result.Pixels.Length <= pixel)
+            {
+                Debug.WriteLine($"{texture.Code} - {pixel}");
+                continue;
+            }
+
             result.Pixels[pixel] = texture.Pixels[pixel];
             uvTexture.Pixels[pixel] = ColorUtil.WhiteArgb;
         }
@@ -705,7 +862,7 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
     protected IEnumerable<int> GetUVPixels(Vector4 uv, float widthFactor, float heightFactor, int width)
     {
-        Vector4i uvPixels = new((int)(uv.X * widthFactor), (int)(uv.Y * heightFactor), (int)(uv.Z * widthFactor), (int)(uv.W * heightFactor));
+        Vector4i uvPixels = new((int)Math.Floor(uv.X * widthFactor), (int)Math.Floor(uv.Y * heightFactor), (int)Math.Ceiling(uv.Z * widthFactor), (int)Math.Ceiling(uv.W * heightFactor));
 
         for (int y = uvPixels.Y; y < uvPixels.W; y++)
         {
@@ -724,12 +881,39 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         public int[] Pixels;
         public float WidthUVFactor;
         public float HeightUVFactor;
+
+        public override string ToString() => $"{Code} ({Width}:{Height})";
     }
 
     protected struct UVForTexture
     {
         public string TextureCode;
         public Vector4 UV;
+
+        public override string ToString() => $"{TextureCode} ({UV})";
+    }
+
+    protected struct UVRemap
+    {
+        public string TextureCode;
+        public Vector2 Offset;
+        public Vector2 FromOldUvRescale;
+        public Vector2 ToNewUvRescale;
+
+        public UVForTexture Remap(UVForTexture uv)
+        {
+            Vector4 uvValue = uv.UV;
+            uvValue.X = (uvValue.X * FromOldUvRescale.X + Offset.X) * ToNewUvRescale.X;
+            uvValue.Y = (uvValue.Y * FromOldUvRescale.Y + Offset.Y) * ToNewUvRescale.Y;
+            uvValue.Z = (uvValue.Z * FromOldUvRescale.X + Offset.X) * ToNewUvRescale.X;
+            uvValue.W = (uvValue.W * FromOldUvRescale.Y + Offset.Y) * ToNewUvRescale.Y;
+
+            return new()
+            {
+                TextureCode = TextureCode,
+                UV = uvValue
+            };
+        }
     }
 
     protected List<UVForTexture> CollectShapeUVs(Shape shape, string prefix, string check)
@@ -768,6 +952,55 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
             {
                 CollectShapeElementUVs(child, uvs, prefix, check);
             }
+        }
+    }
+
+    protected void ReplaceShapeUVs(Shape shape, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    {
+        foreach (ShapeElement element in shape.Elements)
+        {
+            ReaplceShapeElementsUVs(element, uvReplacement);
+        }
+    }
+
+    protected void ReaplceShapeElementsUVs(ShapeElement element, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    {
+        if (element.Faces != null)
+        {
+            foreach ((_, ShapeElementFace? face) in element.Faces)
+            {
+                ReaplceShapeFaceUVs(face, uvReplacement);
+            }
+        }
+
+        if (element.Children != null)
+        {
+            foreach (ShapeElement child in element.Children)
+            {
+                ReaplceShapeElementsUVs(child, uvReplacement);
+            }
+        }
+    }
+
+    protected void ReaplceShapeFaceUVs(ShapeElementFace face, Dictionary<UVForTexture, UVForTexture> uvReplacement)
+    {
+        if (face.Texture == null || face.Uv == null) return;
+
+        Vector4 faceOldUv = new(face.Uv[0], face.Uv[1], face.Uv[2], face.Uv[3]);
+        string textureCode = face.Texture;
+        face.Texture = "main-texture"; // @DEBUG @TODO
+
+        foreach ((UVForTexture oldUv, UVForTexture newUv) in uvReplacement)
+        {
+            if (oldUv.TextureCode != textureCode || oldUv.UV != faceOldUv) continue;
+
+            face.Texture = newUv.TextureCode;
+            face.Uv[0] = newUv.UV.X;
+            face.Uv[1] = newUv.UV.Y;
+            face.Uv[2] = newUv.UV.Z;
+            face.Uv[3] = newUv.UV.W;
+
+            return;
         }
     }
 
@@ -946,8 +1179,8 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
     protected virtual void ValidateSkin()
     {
-        Dictionary<string, string> currentSkin = AppliedSkinParts.Get().ToDictionary(part => part.PartCode, part => part.Code) ?? [];
-        RandomizeSkin(entity, currentSkin, false);
+        //Dictionary<string, string> currentSkin = AppliedSkinParts.Get().ToDictionary(part => part.PartCode, part => part.Code) ?? [];
+        //RandomizeSkin(entity, currentSkin, false);
     }
 
     protected virtual void ReplaceEntityShape()

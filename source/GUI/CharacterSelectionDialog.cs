@@ -1816,7 +1816,14 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
     public bool OnExportAsCPMModel()
     {
         PlayerSkinBehavior? skinMod = capi.World.Player.Entity.GetBehavior<PlayerSkinBehavior>();
-        skinMod?.ExportAsCPMModel();
+        try
+        {
+            skinMod?.ExportAsCPMModel();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+        }
         return true;
     }
     public void OnTabClicked(int tabid)
