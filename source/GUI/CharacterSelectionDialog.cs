@@ -369,6 +369,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
 
     public ElementBounds? SkinTabLeftColumnBounds { get; set; }
     public ElementBounds? SkinTabRightColumnBounds { get; set; }
+    public Dictionary<string, Dictionary<string, string>> Presets { get; set; } = [];
 
     public new void ComposeGuis()
     {
@@ -701,6 +702,9 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
 
         IEnumerable<SkinnablePartExtended> skinParts = skinBehavior.AvailableSkinParts.Get().OfType<SkinnablePartExtended>().Where(part => !part.HideFromGui);
         string[] skinPartTabNames = skinParts.Select(part => part.TabCode).Distinct().ToArray();
+        Dictionary<string, Dictionary<string, string>> presets = skinBehavior.CurrentModel.Presets;
+        string modelCode = skinBehavior.CurrentModelCode.Replace(':', '-');
+        Presets = presets;
 
         if (skinPartTabNames.Length == 1)
         {
@@ -719,6 +723,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         CairoFont smallfont = CairoFont.WhiteSmallText();
         Cairo.TextExtents textExt = smallfont.GetTextExtents(Lang.Get("Show dressed"));
 
+        bool hasPresetsTab = presets.Count > 0;
         int colorIconSize = 22;
         double horizontalOffset = -10;
         double columnsWidth = 236;
@@ -739,6 +744,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds previewAreaBounds = ElementBounds.Fixed(horizontalOffset, yPosition, previewWidth, columnsHeight);
         ElementBounds leftColumnBounds = previewAreaBounds.RightCopy(padding + padding, skinPartsGroupBarHeight, 0, 0).WithFixedWidth(columnsWidth + padding).WithFixedHeight(columnsHeight - skinPartsGroupBarHeight);
         ElementBounds rightColumnBounds = ElementBounds.Fixed(0, yPosition + skinPartsGroupBarHeight, columnsWidth + padding, columnsHeight - skinPartsGroupBarHeight).FixedRightOf(leftColumnBounds, padding);
+        ElementBounds bothColumnBounds = previewAreaBounds.RightCopy(padding + padding, skinPartsGroupBarHeight, 0, 0).WithFixedWidth(leftColumnBounds.fixedWidth + rightColumnBounds.fixedWidth + padding).WithFixedHeight(columnsHeight - skinPartsGroupBarHeight);
         ElementBounds bottomButtonsBarBounds = ElementBounds.Fixed(horizontalOffset, padding, buttonsBarWidth, buttonsBarHeight).FixedUnder(leftColumnBounds);
         ElementBounds skinPartsGroupsTabsBounds = ElementBounds.Fixed(horizontalOffset, yPosition - 1, columnsWidth * 2 + padding, skinPartsGroupBarHeight).FixedRightOf(previewAreaBounds, padding);
         // preview area
@@ -753,7 +759,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds openFolderButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(loadedSkinsDropdownBounds, padding);
         ElementBounds refreshSkinsButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(openFolderButtonBounds, padding);
         ElementBounds confirmButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(-padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(refreshSkinsButtonBounds, padding);
-        
+
         ElementBounds scrollBarModeButtonBounds = ElementBounds.Fixed(480, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
         ElementBounds exportAsCPMModelButtonBounds = ElementBounds.Fixed(306, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
         // skin parts
@@ -774,17 +780,45 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         SkinTabRightColumnBounds = rightColumnScrollableBounds;
 
 
-        int tabsCount = 0;
+        int tabsCount = hasPresetsTab ? 1 : 0;
         GuiTab[] tabs = skinPartTabNames.Select(tabCode => new GuiTab() { Name = Lang.Get($"playermodellib:skinpart-tab-{tabCode}"), DataInt = tabsCount++ }).ToArray();
+        if (hasPresetsTab)
+        {
+            tabs = tabs.Prepend(new GuiTab() { Name = Lang.Get($"playermodellib:skinpart-tab-presets"), DataInt = 0 }).ToArray();
+        }
         CurrentSkinPartTab = Math.Clamp(CurrentSkinPartTab, 0, tabsCount - 1);
-        string currentSkinPartTabCode = skinPartTabNames[CurrentSkinPartTab];
+        string currentSkinPartTabCode;
+        const string presetTabName = "presets";
+        if (hasPresetsTab)
+        {
+            currentSkinPartTabCode = presetTabName;
+            if (CurrentSkinPartTab >= 1)
+            {
+                currentSkinPartTabCode = skinPartTabNames[CurrentSkinPartTab - 1];
+            }
+        }
+        else
+        {
+            currentSkinPartTabCode = skinPartTabNames[CurrentSkinPartTab];
+        }
         composer.AddHorizontalTabs(tabs, skinPartsGroupsTabsBounds, OnSkinPartTabClicked, CairoFont.WhiteSmallText().WithWeight(Cairo.FontWeight.Bold), CairoFont.WhiteSmallText().WithWeight(Cairo.FontWeight.Bold), "skinpart-tabs");
         GuiElementHorizontalTabs mainTabsBar = composer.GetHorizontalTabs("skinpart-tabs");
         mainTabsBar.activeElement = CurrentSkinPartTab;
 
-        composer.AddInset(leftColumnBounds, 4, 0.9f);
+        if (currentSkinPartTabCode == presetTabName)
+        {
+            composer.AddInset(leftColumnBounds, 0, 1.0f);
+            composer.AddInset(rightColumnBounds, 0, 1.0f);
+            composer.AddInset(bothColumnBounds, 2, 0.9f);
+        }
+        else
+        {
+            composer.AddInset(leftColumnBounds, 4, 0.9f);
+            composer.AddInset(rightColumnBounds, 4, 0.9f);
+            composer.AddInset(bothColumnBounds, 0, 1.0f);
+        }
+
         composer.AddInset(previewAreaBounds, 0, 1);
-        composer.AddInset(rightColumnBounds, 4, 0.9f);
         composer.AddInset(bottomButtonsBarBounds, 0, 1);
         composer.AddInset(insetBounds, 4, 0.6f);
         composer.AddInset(hideClothingButtonBounds, 0, 1);
@@ -798,7 +832,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         composer.AddButton(Lang.Get("Folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         composer.AddButton(Lang.Get("Refresh"), OnRefresh, refreshSkinsButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         composer.AddButton(Lang.Get("Confirm Skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Normal);
-        
+
         composer.AddButton(Lang.Get("Scroll bars mode toggle"), OnScrollBarModeToggle, scrollBarModeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
 
         if (PlayerModelModSystem.Settings.ExportCPMModelButton)
@@ -816,9 +850,15 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
             return;
         }
 
-
         composer.AddIndexScroller(OnNewScrollbarValueSkinLeft, leftColumnScrollBarBounds, 0, "skinparts-left-scrollbar", ScrollBarFullMode ? leftColumnBounds : leftColumnScrollBarBounds);
-        composer.BeginClip(leftColumnClipBounds);
+        if (currentSkinPartTabCode != presetTabName)
+        {
+            composer.BeginClip(leftColumnClipBounds);
+        }
+        else
+        {
+            composer.BeginClip(bothColumnBounds);
+        }
 
 
         LeftColumnSkinpartPositions.Clear();
@@ -836,6 +876,18 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         double rightColumnContentHeight = 0;
         SkinnablePartExtended[] partsForCurrentTab = skinParts.Where(part => part.TabCode == currentSkinPartTabCode).ToArray();
         ElementBounds previousSkinPartBounds = ElementBounds.Fixed(0, 0);
+
+        if (currentSkinPartTabCode == presetTabName)
+        {
+            ElementBounds presetButtonBounds = ElementBounds.Fixed(2, 0).WithFixedWidth(leftColumnScrollableBounds.fixedWidth + rightColumnBounds.fixedWidth - padding).WithFixedHeight(40);
+            foreach ((string presetCode, _) in presets)
+            {
+                previousSkinPartBounds = ComposePresetButton(presetCode, modelCode, composer, previousSkinPartBounds, presetButtonBounds, leftColumnScrollableBounds, padding);
+
+                LeftColumnSkinpartPositions.Add(leftColumnContentHeight);
+                leftColumnContentHeight += previousSkinPartBounds.fixedHeight + padding;
+            }
+        }
 
         foreach (SkinnablePartExtended skinPart in partsForCurrentTab)
         {
@@ -1409,6 +1461,16 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
 
         return partBounds;
     }
+    public ElementBounds ComposePresetButton(string presetCode, string modelCode, GuiComposer composer, ElementBounds previous, ElementBounds buttonBounds, ElementBounds parentBounds, double padding)
+    {
+        ElementBounds partBounds = buttonBounds.FlatCopy()
+            .WithParent(parentBounds)
+            .FixedUnder(previous, padding);
+
+        composer.AddButton(Lang.Get($"playermodellib:preset-{modelCode}-{presetCode}"), () => OnPresetSelected(presetCode), partBounds);
+
+        return partBounds;
+    }
 
     public void OnToggleModelGroup(string groupCode, GuiComposer? composer = null)
     {
@@ -1473,7 +1535,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
             .Select(Path.GetFileNameWithoutExtension)
             .OfType<string>()
             .ToList();
-        
+
         if (result.Count == 0)
         {
             return [""];
@@ -1795,6 +1857,20 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ComposeGuis();
 
         OnRandomizeSkin(GetPreviousSelection());
+    }
+    public bool OnPresetSelected(string presetCode)
+    {
+        if (Presets.TryGetValue(presetCode, out Dictionary<string, string>? preset))
+        {
+            Dictionary<string, string> selection = GetCurrentSelection();
+            foreach((string part, string value) in preset)
+            {
+                selection[part] = value;
+            }
+            OnRandomizeSkin(selection);
+        }
+
+        return true;
     }
     public bool OnNextImpl()
     {

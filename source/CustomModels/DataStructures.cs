@@ -6,6 +6,7 @@ using Vintagestory.API.Datastructures;
 using Vintagestory.GameContent;
 using OverhaulLib.Utils;
 using Vintagestory.API.Util;
+using System.Runtime.InteropServices;
 
 namespace PlayerModelLib;
 
@@ -181,6 +182,7 @@ public class CustomModelData
     public Dictionary<string, string[]> DisabledElementsByShape { get; set; } = [];
     public Dictionary<string, string[]> EnabledElementsByShape { get; set; } = [];
     public Dictionary<string, AnimationMetaData> AnimationsMetaData { get; set; } = [];
+    public Dictionary<string, Dictionary<string, string>> Presets { get; set; } = [];
     public Vector2 CollisionBox { get; set; }
     public float EyeHeight { get; set; }
     public Vector2 SizeRange { get; set; }

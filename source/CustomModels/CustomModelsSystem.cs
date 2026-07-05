@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 using OpenTK.Mathematics;
+using OverhaulLib.Utils;
 using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -12,7 +13,6 @@ using Vintagestory.API.Server;
 using Vintagestory.API.Util;
 using Vintagestory.GameContent;
 using Vintagestory.Server;
-using OverhaulLib.Utils;
 
 namespace PlayerModelLib;
 
@@ -88,6 +88,7 @@ public sealed class CustomModelsSystem : ModSystem
         CollectExclusiveClasses();
         ProcessAnimations(api);
         ProcessAttachmentPoints(api);
+        LoadPresets(api);
 
         if (api.Side == EnumAppSide.Client)
         {
@@ -242,6 +243,7 @@ public sealed class CustomModelsSystem : ModSystem
     private const string _enabledElementsByShapePath = "config/enabled-elements-byshape";
     private const string _disabledElementsByShapePath = "config/disabled-elements-byshape";
     private const string _compositeModelReplacementsByCodePath = "config/composite-model-replacements-bycode";
+    private const string _presetsFolder = "customplayermodels-presets";
 
     private bool _defaultLoaded = false;
     private IClientNetworkChannel? _clientChannel;
@@ -830,6 +832,43 @@ public sealed class CustomModelsSystem : ModSystem
             ModelsRemapping.CombineIntoSelf(remap);
         }
     }
+    private void LoadPresets(ICoreAPI api)
+    {
+        List<IAsset> presets = api.Assets.GetManyInCategory("config", _presetsFolder);
+
+        foreach (IAsset asset in presets)
+        {
+            JsonObject? json = JsonFromAsset(asset);
+            if (json == null) continue;
+
+            LoadPreset(json, asset.Location.Domain);
+        }
+    }
+    private void LoadPreset(JsonObject json, string domain)
+    {
+        Dictionary<string, Dictionary<string, Dictionary<string, string>>>? presetsByModels = json.AsObject<Dictionary<string, Dictionary<string, Dictionary<string, string>>>>();
+
+        if (presetsByModels == null) return;
+
+        foreach ((string modelCode, Dictionary<string, Dictionary<string, string>> presets) in presetsByModels)
+        {
+            string code = modelCode;
+            if (!modelCode.Contains(':'))
+            {
+                code = domain + ':' + code;
+            }
+
+            if (!CustomModels.TryGetValue(code, out CustomModelData? data))
+            {
+                continue;
+            }
+
+            foreach ((string presetCode, Dictionary<string, string> preset) in presets)
+            {
+                data.Presets[presetCode] = preset;
+            }
+        }
+    }
 
     private static AssetLocation GetShapeLocation(string path) => new AssetLocation(path).WithPathPrefixOnce("shapes/").WithPathAppendixOnce(".json");
     private void ProcessAnimations(ICoreAPI api)
@@ -1168,6 +1207,29 @@ public sealed class CustomModelsSystem : ModSystem
         }
 
         return result;
+    }
+    private JsonObject? JsonFromAsset(IAsset asset)
+    {
+        JObject? json = null;
+
+        try
+        {
+            string text = asset.ToText();
+            json = JsonObject.FromJson(text).Token as JObject;
+
+            if (json == null)
+            {
+                Log.Error(_api, this, $"Error when trying to load model config '{asset.Location}'.");
+                return null;
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.Error(_api, this, $"Exception when trying to load model config '{asset.Location}':\n{exception}");
+            return null;
+        }
+
+        return new(json);
     }
     private Dictionary<string, Dictionary<string, string>> ReplacementsFromAsset(IAsset asset)
     {
