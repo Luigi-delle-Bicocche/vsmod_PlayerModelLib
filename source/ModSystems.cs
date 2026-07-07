@@ -7,7 +7,7 @@ namespace PlayerModelLib;
 public sealed class Settings
 {
     public bool ExportShapeFiles { get; set; } = false;
-    public bool ExportCPMModelButton { get; set; } = false;
+    public bool ExportCPMModelButton { get; set; } = true;
     public string DefaultModelCode { get; set; } = "seraph";
     public bool DisableModelClassesAndTraits { get; set; } = false;
     public bool MultiThreadPayerShapeGeneration { get; set; } = true;

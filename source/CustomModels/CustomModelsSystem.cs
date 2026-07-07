@@ -243,7 +243,8 @@ public sealed class CustomModelsSystem : ModSystem
     private const string _enabledElementsByShapePath = "config/enabled-elements-byshape";
     private const string _disabledElementsByShapePath = "config/disabled-elements-byshape";
     private const string _compositeModelReplacementsByCodePath = "config/composite-model-replacements-bycode";
-    private const string _presetsFolder = "customplayermodels-presets";
+    private const string _modelsFolder = "customplayermodels/";
+    private const string _presetsFolder = "customplayermodels-presets/";
 
     private bool _defaultLoaded = false;
     private IClientNetworkChannel? _clientChannel;
@@ -349,7 +350,7 @@ public sealed class CustomModelsSystem : ModSystem
     }
     private void Load(ICoreAPI api)
     {
-        List<IAsset> modelsConfigs = api.Assets.GetManyInCategory("config", "customplayermodels");
+        List<IAsset> modelsConfigs = api.Assets.GetManyInCategory("config", _modelsFolder);
 
         foreach (Dictionary<string, CustomModelConfig> customModelConfigs in modelsConfigs.Select(FromAsset))
         {

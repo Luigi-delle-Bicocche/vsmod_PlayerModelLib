@@ -694,7 +694,6 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
 
         OnToggleDressOnOff(false);
     }
-
     public void ComposeSkinTab(GuiDialogCreateCustomCharacter dialog, GuiComposer composer, double yPosition, double padding, double slotSize, ElementBounds backgroundBounds, ElementBounds dialogBounds)
     {
         PlayerSkinBehavior? skinBehavior = capi.World.Player.Entity.GetBehavior<PlayerSkinBehavior>();
@@ -850,7 +849,12 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
             return;
         }
 
-        composer.AddIndexScroller(OnNewScrollbarValueSkinLeft, leftColumnScrollBarBounds, 0, "skinparts-left-scrollbar", ScrollBarFullMode ? leftColumnBounds : leftColumnScrollBarBounds);
+        ElementBounds scrollBounds = ScrollBarFullMode ? leftColumnBounds : leftColumnScrollBarBounds;
+        if (currentSkinPartTabCode == presetTabName)
+        {
+            scrollBounds = bothColumnBounds;
+        }
+        composer.AddIndexScroller(OnNewScrollbarValueSkinLeft, leftColumnScrollBarBounds, 0, "skinparts-left-scrollbar", scrollBounds);
         if (currentSkinPartTabCode != presetTabName)
         {
             composer.BeginClip(leftColumnClipBounds);
@@ -1863,7 +1867,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         if (Presets.TryGetValue(presetCode, out Dictionary<string, string>? preset))
         {
             Dictionary<string, string> selection = GetCurrentSelection();
-            foreach((string part, string value) in preset)
+            foreach ((string part, string value) in preset)
             {
                 selection[part] = value;
             }

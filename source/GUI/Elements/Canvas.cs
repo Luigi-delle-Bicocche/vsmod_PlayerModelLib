@@ -219,14 +219,15 @@ public class GuiElementCanvasEditor : GuiElement
         _paletteOffsetX = halfW;
         _paletteOffsetY = 0;
         _paletteW = halfW;
-        _paletteH = canvasH;
+        
 
         double swatchGap = scaled(ColorSwatchGap);
         double nominalSz = scaled(ColorSwatchSz);
-        _swatchCols = Math.Max(1,
-            (int)((_paletteW - scaled(Pad) * 2 + swatchGap) / (nominalSz + swatchGap)));
+        _swatchCols = Math.Max(1, (int)((_paletteW - scaled(Pad) * 2 + swatchGap) / (nominalSz + swatchGap)));
         double totalGaps = (_swatchCols - 1) * swatchGap;
         _swatchSz = (_paletteW - scaled(Pad) * 2 - totalGaps) / _swatchCols;
+
+        _paletteH = swatchGap * pad + (totalGaps + 1) * nominalSz;
     }
 
     private void CalcLayoutWide()
@@ -276,7 +277,12 @@ public class GuiElementCanvasEditor : GuiElement
     {
         double pad = scaled(Pad);
         double scale = RuntimeEnv.GUIScale;
-        double pickerOffsetY = (_canvasOffsetY + _canvasH + pad) / scale;
+
+        double canvasBottom = _canvasOffsetY + _canvasH;
+        double paletteBottom = _paletteOffsetY + _paletteH;
+        double contentBottom = Math.Max(canvasBottom, paletteBottom);
+
+        double pickerOffsetY = (contentBottom + pad) / scale;
         return ElementBounds
             .Fixed(0, pickerOffsetY, Bounds.InnerWidth / scale, ColorPickerHeight)
             .WithParent(Bounds);
