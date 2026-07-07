@@ -299,9 +299,12 @@ public class GuiElementColorPicker : GuiElement
             ctx.Stroke();
         }
 
-        generateTexture(surface, ref _hexTextTexture);
+        if (surface != null && _hexTextTexture != null)
+        {
+            generateTexture(surface, ref _hexTextTexture);
+        }
         ctx.Dispose();
-        surface.Dispose();
+        surface?.Dispose();
     }
 
     // ─────────────────────────────────────────────────────────────
