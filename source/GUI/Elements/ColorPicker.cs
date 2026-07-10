@@ -1,4 +1,5 @@
 ﻿using Cairo;
+using OverhaulLib.Utils;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Vintagestory.GameContent;
@@ -216,18 +217,25 @@ public class GuiElementColorPicker : GuiElement
     // ─────────────────────────────────────────────────────────────
     public override void ComposeElements(Context ctxStatic, ImageSurface surface)
     {
-        Bounds.CalcWorldBounds();
-        CalcLayout();
+        try
+        {
+            Bounds.CalcWorldBounds();
+            CalcLayout();
 
-        ComposeHexBackground();
-        ComposeHexText();
+            ComposeHexBackground();
+            ComposeHexText();
 
-        if (ShowHueSlider) RecomposeHueSlider();
-        if (ShowSatSlider) RecomposeSatSlider();
-        if (ShowValSlider) RecomposeValSlider();
-        if (ShowAlphaSlider) RecomposeAlphaSlider();
+            if (ShowHueSlider) RecomposeHueSlider();
+            if (ShowSatSlider) RecomposeSatSlider();
+            if (ShowValSlider) RecomposeValSlider();
+            if (ShowAlphaSlider) RecomposeAlphaSlider();
 
-        RecomposePreview();
+            RecomposePreview();
+        }
+        catch (Exception exception)
+        {
+            Log.Verbose(api, this, $"Error on composing GuiElementColorPicker: {exception}");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

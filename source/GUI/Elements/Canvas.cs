@@ -1,4 +1,5 @@
 ﻿using Cairo;
+using OverhaulLib.Utils;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 
@@ -294,25 +295,32 @@ public class GuiElementCanvasEditor : GuiElement
 
     public override void ComposeElements(Context ctxStatic, ImageSurface surface)
     {
-        CalcLayout();
-
-        _colorPicker?.Dispose();
-        _colorPicker = null;
-
-        if (!_wideMode)
+        try
         {
-            double[] initialColor = ArgbToRgba(_colors[_selectedColorIndex == 0 ? 1 : _selectedColorIndex]);
-            _colorPicker = new GuiElementColorPicker(
-                api,
-                BuildPickerBounds(),
-                OnPickerColorChanged,
-                initialColor,
-                ClipBounds);  // propagate clip bounds into the embedded picker
-            _colorPicker.ComposeElements(ctxStatic, surface);
-        }
+            CalcLayout();
 
-        _canvasDirty = true;
-        _paletteDirty = true;
+            _colorPicker?.Dispose();
+            _colorPicker = null;
+
+            if (!_wideMode)
+            {
+                double[] initialColor = ArgbToRgba(_colors[_selectedColorIndex == 0 ? 1 : _selectedColorIndex]);
+                _colorPicker = new GuiElementColorPicker(
+                    api,
+                    BuildPickerBounds(),
+                    OnPickerColorChanged,
+                    initialColor,
+                    ClipBounds);  // propagate clip bounds into the embedded picker
+                _colorPicker.ComposeElements(ctxStatic, surface);
+            }
+
+            _canvasDirty = true;
+            _paletteDirty = true;
+        }
+        catch (Exception exception)
+        {
+            Log.Verbose(api, this, $"Error on composing GuiElementCanvasEditor: {exception}");
+        }
     }
 
     // =========================================================================
