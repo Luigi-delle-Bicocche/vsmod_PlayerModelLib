@@ -22,6 +22,16 @@
   "game:playermodelgroup-humans": "Humans",
   "game:playermodelgroup-beasts": "Beasts",
 
+  "gui-button-hide-clothing": "Hide clothing",
+  "gui-button-ramdomize": "Randomize",
+  "gui-button-last-selection": "Last selection",
+  "gui-button-export-skin": "Export",
+  "gui-button-import-skin": "Import",
+  "gui-button-open-skins-folder": "Folder",
+  "gui-button-refresh-skins": "Refresh",
+  "gui-button-confirm-skin": "Confirm Skin",
+  "gui-button-export-skin-as-cpm": "Export as CPM model",
+
   "setting-title-0": "Seraph model settings",
 
   "setting-disable_custom_classes_and_traits": "Disable custom model classes and traits",
@@ -48,7 +58,5 @@
   "setting-comment-max_collision_box_horizontal": "Restricts collision box width, to allow player to squize into 1 blocks wide opennings.",
   "setting-comment-max_eye_height": "Restricts eye height, if eye height is higher than 2.0, player camera will clip into blocks when passing rhough 2 blocks high opennings.",
   "setting-comment-export_shape_files": "Will export adjusted shapes of every equiped piece of armor/clothes on retesselation, which you can trigger by equiping something. Will export shapes into ModConfig folder.",
-  "setting-comment-multi_thread_payer_shape_generation": "Moves player model generation into a separate thread, that prevents freezes on player entity update, but can cause issues related to multi-threading.",
-
-  "gui-button-hide-clothing": "Hide clothing"
+  "setting-comment-multi_thread_payer_shape_generation": "Moves player model generation into a separate thread, that prevents freezes on player entity update, but can cause issues related to multi-threading."
 }

@@ -7,62 +7,6 @@ namespace PlayerModelLib;
 
 public class GuiElemenExtendedtScrollbar : GuiElementControl
 {
-    public static int DefaultScrollbarWidth = 20;
-    public static int DefaultScrollbarPadding = 2;
-
-    protected Action<float> onNewScrollbarValue;
-
-    public bool mouseDownOnScrollbarHandle;
-    public int mouseDownStartY;
-
-    protected float visibleHeight;
-    protected float totalHeight;
-
-    protected float currentHandlePosition;
-    protected float currentHandleHeight = 0;
-
-    /// <summary>
-    /// When set, only captures mouse input when hovering inside this bounds.
-    /// If null, falls back to using Bounds.
-    /// </summary>
-    protected ElementBounds interactionBounds;
-
-    /// <summary>
-    /// When > 0, the handle height is fixed to this value and won't be
-    /// recalculated from visible/total height ratio.
-    /// </summary>
-    protected float fixedHandleHeight = 0;
-
-    public float zOffset;
-
-    protected LoadedTexture handleTexture;
-
-    public override bool Focusable => enabled;
-
-    /// <summary>
-    /// Moving 1 pixel of the scrollbar moves the content by ScrollConversionFactor pixels.
-    /// </summary>
-    public float ScrollConversionFactor
-    {
-        get
-        {
-            float movableArea = (float)(Bounds.InnerHeight - currentHandleHeight);
-            if (movableArea <= 0) return 1;
-
-            float innerMovableArea = totalHeight - visibleHeight;
-            return innerMovableArea / movableArea;
-        }
-    }
-
-    /// <summary>
-    /// The current Y position of the inner element.
-    /// </summary>
-    public float CurrentYPosition
-    {
-        get => currentHandlePosition * ScrollConversionFactor;
-        set => currentHandlePosition = value / ScrollConversionFactor;
-    }
-
     /// <summary>
     /// Creates a new Scrollbar.
     /// </summary>
@@ -78,47 +22,63 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
     /// pixel height instead of being derived from the visible/total ratio.
     /// </param>
     public GuiElemenExtendedtScrollbar(
-    ICoreClientAPI capi,
-    Action<float> onNewScrollbarValue,
-    ElementBounds bounds,
-    ElementBounds interactionBounds = null,
-    float fixedHandleHeight = 0)
-    : base(capi, bounds)
+        ICoreClientAPI capi,
+        Action<float> onNewScrollbarValue,
+        ElementBounds bounds,
+        ElementBounds? interactionBounds = null,
+        float fixedHandleHeight = 0) : base(capi, bounds)
     {
-        handleTexture = new LoadedTexture(capi);
-        this.onNewScrollbarValue = onNewScrollbarValue;
-        this.interactionBounds = interactionBounds;
-        this.fixedHandleHeight = fixedHandleHeight;
+        HandleTexture = new LoadedTexture(capi);
+        OnNewScrollbarValue = onNewScrollbarValue;
+        InteractionBounds = interactionBounds;
+        FixedHandleHeight = fixedHandleHeight;
 
         // If a fixed size was given, apply it immediately so ComposeElements
         // already has a non-zero currentHandleHeight when it calls RecomposeHandle.
         if (fixedHandleHeight > 0)
-            currentHandleHeight = fixedHandleHeight;
+        {
+            CurrentHandleHeight = fixedHandleHeight;
+        }
 
-        currentHandlePosition = 0;
+        CurrentHandlePosition = 0;
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
 
+
+    public override bool Focusable => enabled;
     /// <summary>
-    /// Returns true when <paramref name="x"/>/<paramref name="y"/> lie inside
-    /// the interaction bounds (or the element bounds if no interaction bounds
-    /// were supplied).
+    /// Moving 1 pixel of the scrollbar moves the content by ScrollConversionFactor pixels.
     /// </summary>
-    private bool IsInsideInteractionBounds(int x, int y)
+    public float ScrollConversionFactor
     {
-        if (interactionBounds != null)
-            return interactionBounds.PointInside(x, y);
+        get
+        {
+            float movableArea = (float)(Bounds.InnerHeight - CurrentHandleHeight);
+            if (movableArea <= 0) return 1;
 
-        return Bounds.PointInside(x, y);
+            float innerMovableArea = TotalHeight - VisibleHeight;
+            return innerMovableArea / movableArea;
+        }
+    }
+    /// <summary>
+    /// The current Y position of the inner element.
+    /// </summary>
+    public float CurrentYPosition
+    {
+        get => CurrentHandlePosition * ScrollConversionFactor;
+        set => CurrentHandlePosition = value / ScrollConversionFactor;
     }
 
-    // ── Composition ─────────────────────────────────────────────────────────
+
+    public bool MouseDownOnScrollbarHandle;
+    public int MouseDownStartY;
+    public float ZOffset;
+
 
     public override void ComposeElements(Context ctxStatic, ImageSurface surface)
     {
         Bounds.CalcWorldBounds();
-        interactionBounds?.CalcWorldBounds();
+        InteractionBounds?.CalcWorldBounds();
 
         ctxStatic.SetSourceRGBA(0, 0, 0, 0.2);
         ElementRoundRectangle(ctxStatic, Bounds, false);
@@ -134,7 +94,7 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
         Bounds.CalcWorldBounds();
 
         int w = (int)Bounds.InnerWidth;
-        int h = (int)currentHandleHeight;
+        int h = (int)CurrentHandleHeight;
         if (w <= 0 || h <= 0) return;   // nothing to draw yet
 
         ImageSurface surface = new ImageSurface(Format.Argb32, w, h);
@@ -148,34 +108,30 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
 
         EmbossRoundRectangleElement(ctx, 0, 0, w, h, false, 2, 1);
 
-        generateTexture(surface, ref handleTexture);
+        generateTexture(surface, ref HandleTexture);
 
         ctx.Dispose();
         surface.Dispose();
     }
 
-    // ── Rendering ───────────────────────────────────────────────────────────
-
     public override void RenderInteractiveElements(float deltaTime)
     {
         api.Render.Render2DTexturePremultipliedAlpha(
-            handleTexture.TextureId,
+            HandleTexture.TextureId,
             (int)(Bounds.renderX + Bounds.absPaddingX),
-            (int)(Bounds.renderY + Bounds.absPaddingY + currentHandlePosition),
+            (int)(Bounds.renderY + Bounds.absPaddingY + CurrentHandlePosition),
             (int)Bounds.InnerWidth,
-            (int)currentHandleHeight,
-            200 + zOffset
+            (int)CurrentHandleHeight,
+            200 + ZOffset
         );
     }
-
-    // ── Public API ──────────────────────────────────────────────────────────
 
     /// <summary>
     /// Sets both the visible and total heights, then recalculates the handle.
     /// </summary>
     public void SetHeights(float visibleHeight, float totalHeight)
     {
-        this.visibleHeight = visibleHeight;
+        this.VisibleHeight = visibleHeight;
         SetNewTotalHeight(totalHeight);
     }
 
@@ -184,23 +140,23 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
     /// </summary>
     public void SetNewTotalHeight(float totalHeight)
     {
-        this.totalHeight = totalHeight;
+        this.TotalHeight = totalHeight;
 
-        if (fixedHandleHeight > 0)
+        if (FixedHandleHeight > 0)
         {
             // Clamp against the actual track height which is only valid after
             // CalcWorldBounds has run, so do it here as well.
-            currentHandleHeight = Math.Min(fixedHandleHeight, (float)Bounds.InnerHeight);
+            CurrentHandleHeight = Math.Min(FixedHandleHeight, (float)Bounds.InnerHeight);
         }
         else
         {
-            float ratio = GameMath.Clamp(visibleHeight / totalHeight, 0f, 1f);
-            currentHandleHeight = Math.Max(10f, ratio * (float)Bounds.InnerHeight);
+            float ratio = GameMath.Clamp(VisibleHeight / totalHeight, 0f, 1f);
+            CurrentHandleHeight = Math.Max(10f, ratio * (float)Bounds.InnerHeight);
         }
 
-        currentHandlePosition = GameMath.Clamp(
-            currentHandlePosition, 0f,
-            (float)(Bounds.InnerHeight - currentHandleHeight));
+        CurrentHandlePosition = GameMath.Clamp(
+            CurrentHandlePosition, 0f,
+            (float)(Bounds.InnerHeight - CurrentHandleHeight));
 
         TriggerChanged();
         RecomposeHandle();
@@ -208,40 +164,38 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
 
     public void SetScrollbarPosition(int pos)
     {
-        currentHandlePosition = Math.Max(0f, pos);
-        onNewScrollbarValue(0);
+        CurrentHandlePosition = Math.Max(0f, pos);
+        OnNewScrollbarValue(0);
     }
 
-    /// <summary>Triggers the change callback with the current scroll value.</summary>
+
     public void TriggerChanged()
     {
-        onNewScrollbarValue(CurrentYPosition);
+        OnNewScrollbarValue(CurrentYPosition);
     }
-
-    /// <summary>Scrolls to the very bottom of the content.</summary>
     public void ScrollToBottom()
     {
-        if (totalHeight < visibleHeight)
+        if (TotalHeight < VisibleHeight)
         {
-            currentHandlePosition = 0;
-            onNewScrollbarValue(0);
+            CurrentHandlePosition = 0;
+            OnNewScrollbarValue(0);
         }
         else
         {
-            currentHandlePosition = (float)(Bounds.InnerHeight - currentHandleHeight);
-            onNewScrollbarValue(totalHeight - visibleHeight);
+            CurrentHandlePosition = (float)(Bounds.InnerHeight - CurrentHandleHeight);
+            OnNewScrollbarValue(TotalHeight - VisibleHeight);
         }
     }
 
     public void EnsureVisible(double posX, double posY)
     {
         double startY = CurrentYPosition;
-        double endY = CurrentYPosition + visibleHeight;
+        double endY = CurrentYPosition + VisibleHeight;
 
         if (posY < startY)
         {
             float diff = (float)(startY - posY) / ScrollConversionFactor;
-            currentHandlePosition = Math.Max(0f, currentHandlePosition - diff);
+            CurrentHandlePosition = Math.Max(0f, CurrentHandlePosition - diff);
             TriggerChanged();
             return;
         }
@@ -249,61 +203,55 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
         if (posY > endY)
         {
             float diff = (float)(posY - endY) / ScrollConversionFactor;
-            currentHandlePosition = (float)Math.Min(
-                Bounds.InnerHeight - currentHandleHeight,
-                currentHandlePosition + diff);
+            CurrentHandlePosition = (float)Math.Min(
+                Bounds.InnerHeight - CurrentHandleHeight,
+                CurrentHandlePosition + diff);
             TriggerChanged();
         }
     }
-
-    // ── Input ───────────────────────────────────────────────────────────────
 
     public override void OnMouseWheel(ICoreClientAPI api, MouseWheelEventArgs args)
     {
         // Only react when the pointer is inside the interaction area.
         if (!IsInsideInteractionBounds(api.Input.MouseX, api.Input.MouseY)) return;
-        if (Bounds.InnerHeight <= currentHandleHeight + 0.001f) return;
+        if (Bounds.InnerHeight <= CurrentHandleHeight + 0.001f) return;
 
-        float y = currentHandlePosition
+        float y = CurrentHandlePosition
                   - (float)scaled(102) * args.deltaPrecise / ScrollConversionFactor;
 
-        double movable = Bounds.InnerHeight - currentHandleHeight;
-        currentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
+        double movable = Bounds.InnerHeight - CurrentHandleHeight;
+        CurrentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
         TriggerChanged();
 
         args.SetHandled(true);
     }
-
     public override void OnMouseDownOnElement(ICoreClientAPI api, MouseEvent args)
     {
-        if (Bounds.InnerHeight <= currentHandleHeight + 0.001f) return;
+        if (Bounds.InnerHeight <= CurrentHandleHeight + 0.001f) return;
 
         // Only start dragging when the click is inside the interaction bounds.
         if (!IsInsideInteractionBounds(args.X, args.Y)) return;
 
-        mouseDownOnScrollbarHandle = true;
-        mouseDownStartY = GameMath.Max(0, args.Y - (int)Bounds.renderY, 0);
+        MouseDownOnScrollbarHandle = true;
+        MouseDownStartY = GameMath.Max(0, args.Y - (int)Bounds.renderY, 0);
 
-        if (mouseDownStartY > currentHandleHeight)
-            mouseDownStartY = (int)currentHandleHeight / 2;
+        if (MouseDownStartY > CurrentHandleHeight)
+            MouseDownStartY = (int)CurrentHandleHeight / 2;
 
-        UpdateHandlePositionAbs(args.Y - (int)Bounds.renderY - mouseDownStartY);
+        UpdateHandlePositionAbs(args.Y - (int)Bounds.renderY - MouseDownStartY);
         args.Handled = true;
     }
-
     public override void OnMouseUp(ICoreClientAPI api, MouseEvent args)
     {
-        mouseDownOnScrollbarHandle = false;
+        MouseDownOnScrollbarHandle = false;
     }
-
     public override void OnMouseMove(ICoreClientAPI api, MouseEvent args)
     {
-        if (mouseDownOnScrollbarHandle)
+        if (MouseDownOnScrollbarHandle)
         {
-            UpdateHandlePositionAbs(args.Y - (int)Bounds.renderY - mouseDownStartY);
+            UpdateHandlePositionAbs(args.Y - (int)Bounds.renderY - MouseDownStartY);
         }
     }
-
     public override void OnKeyDown(ICoreClientAPI api, KeyEvent args)
     {
         if (!hasFocus) return;
@@ -311,30 +259,19 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
         if (args.KeyCode == (int)GlKeys.Down || args.KeyCode == (int)GlKeys.Up)
         {
             float direction = args.KeyCode == (int)GlKeys.Down ? -0.5f : 0.5f;
-            float y = currentHandlePosition
+            float y = CurrentHandlePosition
                       - (float)scaled(102) * direction / ScrollConversionFactor;
 
-            double movable = Bounds.InnerHeight - currentHandleHeight;
-            currentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
+            double movable = Bounds.InnerHeight - CurrentHandleHeight;
+            CurrentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
             TriggerChanged();
         }
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
-
-    private void UpdateHandlePositionAbs(float y)
-    {
-        double movable = Bounds.InnerHeight - currentHandleHeight;
-        currentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
-        TriggerChanged();
-    }
-
-    // ── Dispose ──────────────────────────────────────────────────────────────
-
     public override void Dispose()
     {
         base.Dispose();
-        handleTexture.Dispose();
+        HandleTexture.Dispose();
     }
 
     /// <summary>
@@ -343,30 +280,74 @@ public class GuiElemenExtendedtScrollbar : GuiElementControl
     /// </summary>
     public void SetFixedHandleHeight(float height)
     {
-        fixedHandleHeight = height;
+        FixedHandleHeight = height;
 
-        if (fixedHandleHeight > 0)
+        if (FixedHandleHeight > 0)
         {
-            currentHandleHeight = Math.Min(fixedHandleHeight, (float)Bounds.InnerHeight);
+            CurrentHandleHeight = Math.Min(FixedHandleHeight, (float)Bounds.InnerHeight);
         }
         else
         {
             // Fall back to proportional sizing using whatever heights were set last.
-            float ratio = GameMath.Clamp(visibleHeight / totalHeight, 0f, 1f);
-            currentHandleHeight = Math.Max(10f, ratio * (float)Bounds.InnerHeight);
+            float ratio = GameMath.Clamp(VisibleHeight / TotalHeight, 0f, 1f);
+            CurrentHandleHeight = Math.Max(10f, ratio * (float)Bounds.InnerHeight);
         }
 
         // Keep handle inside the track.
-        currentHandlePosition = GameMath.Clamp(
-            currentHandlePosition, 0f,
-            (float)(Bounds.InnerHeight - currentHandleHeight));
+        CurrentHandlePosition = GameMath.Clamp(
+            CurrentHandlePosition, 0f,
+            (float)(Bounds.InnerHeight - CurrentHandleHeight));
 
         TriggerChanged();
         RecomposeHandle();
     }
+
+
+
+
+    protected Action<float> OnNewScrollbarValue;
+    protected float VisibleHeight;
+    protected float TotalHeight;
+    protected float CurrentHandlePosition;
+    protected float CurrentHandleHeight = 0;
+    protected LoadedTexture HandleTexture;
+
+    /// <summary>
+    /// When set, only captures mouse input when hovering inside this bounds.
+    /// If null, falls back to using Bounds.
+    /// </summary>
+    protected ElementBounds? InteractionBounds;
+
+    /// <summary>
+    /// When > 0, the handle height is fixed to this value and won't be
+    /// recalculated from visible/total height ratio.
+    /// </summary>
+    protected float FixedHandleHeight = 0;
+
+
+    protected void UpdateHandlePositionAbs(float y)
+    {
+        double movable = Bounds.InnerHeight - CurrentHandleHeight;
+        CurrentHandlePosition = (float)GameMath.Clamp(y, 0, movable);
+        TriggerChanged();
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="x"/>/<paramref name="y"/> lie inside
+    /// the interaction bounds (or the element bounds if no interaction bounds
+    /// were supplied).
+    /// </summary>
+    protected bool IsInsideInteractionBounds(int x, int y)
+    {
+        if (InteractionBounds != null)
+        {
+            return InteractionBounds.PointInside(x, y);
+        }
+
+        return Bounds.PointInside(x, y);
+    }
 }
 
-// ── Composer helpers ─────────────────────────────────────────────────────────
 
 public static partial class GuiComposerHelpers
 {
@@ -389,8 +370,8 @@ public static partial class GuiComposerHelpers
         this GuiComposer composer,
         Action<float> onNewScrollbarValue,
         ElementBounds bounds,
-        string key = null,
-        ElementBounds interactionBounds = null,
+        string? key = null,
+        ElementBounds? interactionBounds = null,
         float fixedHandleHeight = 0)
     {
         if (!composer.Composed)
@@ -407,7 +388,5 @@ public static partial class GuiComposerHelpers
         return composer;
     }
 
-    /// <summary>Gets a scrollbar element by key.</summary>
-    public static GuiElemenExtendedtScrollbar GetExtendedScrollbar(this GuiComposer composer, string key)
-        => (GuiElemenExtendedtScrollbar)composer.GetElement(key);
+    public static GuiElemenExtendedtScrollbar GetExtendedScrollbar(this GuiComposer composer, string key) => (GuiElemenExtendedtScrollbar)composer.GetElement(key);
 }

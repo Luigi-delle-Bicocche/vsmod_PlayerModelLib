@@ -1,0 +1,72 @@
+[
+   {
+     "side": "Universal",
+     "op": "addmerge",
+     "file": "game:entities/humanoid/player.json",
+     "path": "/attributes/skinnableParts/code=baseskin",
+     "value": {
+       "texturetarget": "seraph",
+       "targetskinparts": ["base"],
+       "overlaymode": "normal"
+     }
+   },
+   {
+     "side": "Universal",
+     "op": "addmerge",
+     "file": "game:entities/humanoid/player.json",
+     "path": "/attributes/skinnableParts/code=underwear",
+     "value": {
+       "texturetarget": "seraph",
+       "targetskinparts": ["base"],
+       "overlaymode": "normal"
+     }
+   },
+   {
+     "side": "Universal",
+     "op": "addmerge",
+     "file": "game:entities/humanoid/player.json",
+     "path": "/attributes/skinnableParts/code=haircolor",
+     "value": {
+       "texturetarget": "hair",
+       "targetskinparts": ["beard", "mustache", "hairextra", "hairbase"]
+     }
+   },
+   {
+     "side": "Universal",
+     "op": "addmerge",
+     "file": "game:entities/humanoid/player.json",
+     "path": "/attributes/skinnableParts/code=eyecolor",
+     "value": {
+       "texturetarget": "playermodellib-iris",
+       "targetskinparts": ["facialexpression"],
+       "overlaymode": "normal"
+     }
+   },
+   {
+     "side": "Universal",
+     "op": "replace",
+     "file": "game:entities/humanoid/player.json",
+     "path": "/attributes/skinnableParts/code=facialexpression/variants",
+     "value": [
+        { "code": "angry", "shape": { "base": "playermodellib:seraphfaces/angry" } },
+        { "code": "grin", "shape": { "base": "playermodellib:seraphfaces/grin" } },
+        { "code": "smirk", "shape": { "base": "playermodellib:seraphfaces/smirk" } },
+        { "code": "kind", "shape": { "base": "playermodellib:seraphfaces/kind" } },
+        { "code": "upset", "shape": { "base": "playermodellib:seraphfaces/upset" } },
+        { "code": "neutral", "shape": { "base": "playermodellib:seraphfaces/neutral" } },
+        { "code": "sad", "shape": { "base": "playermodellib:seraphfaces/sad" } },
+        { "code": "serious", "shape": { "base": "playermodellib:seraphfaces/serious" } },
+        { "code": "tired", "shape": { "base": "playermodellib:seraphfaces/tired" } },
+        { "code": "very-sad", "shape": { "base": "playermodellib:seraphfaces/very-sad" } },
+        { "code": "exhausted", "shape": { "base": "playermodellib:seraphfaces/exhausted" } },
+        { "code": "mellow", "shape": { "base": "playermodellib:seraphfaces/mellow" } },
+        { "code": "adequate", "shape": { "base": "playermodellib:seraphfaces/adequate" } },
+        { "code": "caring", "shape": { "base": "playermodellib:seraphfaces/caring" } },
+        { "code": "determined", "shape": { "base": "playermodellib:seraphfaces/determined" } },
+        { "code": "fierce", "shape": { "base": "playermodellib:seraphfaces/fierce" } },
+        { "code": "thoughtful", "shape": { "base": "playermodellib:seraphfaces/thoughtful" } },
+        { "code": "weary", "shape": { "base": "playermodellib:seraphfaces/weary" } },
+        { "code": "indifferent", "shape": { "base": "playermodellib:seraphfaces/indifferent" } }
+     ]
+   }
+]

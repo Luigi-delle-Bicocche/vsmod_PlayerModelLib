@@ -5,31 +5,9 @@ namespace PlayerModelLib;
 
 public static class GuiComposerDropDownBlocker
 {
-    private static FieldInfo _interactiveElementsField;
-
-    private static FieldInfo InteractiveElementsField
+    public static GuiElementScrollableDropDown? FindBlockingDropDown(GuiComposer composer, int x, int y)
     {
-        get
-        {
-            if (_interactiveElementsField == null)
-            {
-                _interactiveElementsField = typeof(GuiComposer).GetField(
-                    "interactiveElements",
-                    BindingFlags.NonPublic | BindingFlags.Instance
-                );
-            }
-            return _interactiveElementsField;
-        }
-    }
-
-    private static Dictionary<string, GuiElement> GetElements(GuiComposer composer)
-    {
-        return InteractiveElementsField?.GetValue(composer) as Dictionary<string, GuiElement>;
-    }
-
-    public static GuiElementScrollableDropDown FindBlockingDropDown(GuiComposer composer, int x, int y)
-    {
-        Dictionary<string, GuiElement> elements = GetElements(composer);
+        Dictionary<string, GuiElement>? elements = GetElements(composer);
         if (elements == null) return null;
 
         foreach (GuiElement element in elements.Values)
@@ -56,7 +34,7 @@ public static class GuiComposerDropDownBlocker
     /// </summary>
     public static bool HandleMouseDown(GuiComposer composer, ICoreClientAPI api, MouseEvent args)
     {
-        Dictionary<string, GuiElement> elements = GetElements(composer);
+        Dictionary<string, GuiElement>? elements = GetElements(composer);
         if (elements == null) return false;
 
         // First pass: check if any open dropdown list owns this position.
@@ -83,7 +61,7 @@ public static class GuiComposerDropDownBlocker
     /// </summary>
     public static bool HandleMouseUp(GuiComposer composer, ICoreClientAPI api, MouseEvent args)
     {
-        Dictionary<string, GuiElement> elements = GetElements(composer);
+        Dictionary<string, GuiElement>? elements = GetElements(composer);
         if (elements == null) return false;
 
         foreach (GuiElement element in elements.Values)
@@ -100,5 +78,29 @@ public static class GuiComposerDropDownBlocker
         }
 
         return false;
+    }
+
+
+
+    private static FieldInfo? _interactiveElementsField;
+    
+    private static FieldInfo? InteractiveElementsField
+    {
+        get
+        {
+            if (_interactiveElementsField == null)
+            {
+                _interactiveElementsField = typeof(GuiComposer).GetField(
+                    "interactiveElements",
+                    BindingFlags.NonPublic | BindingFlags.Instance
+                );
+            }
+            return _interactiveElementsField;
+        }
+    }
+
+    private static Dictionary<string, GuiElement>? GetElements(GuiComposer composer)
+    {
+        return InteractiveElementsField?.GetValue(composer) as Dictionary<string, GuiElement>;
     }
 }

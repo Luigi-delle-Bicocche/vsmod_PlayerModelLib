@@ -356,7 +356,6 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
     public const double DialogWidth = 757;
     public string ImportSkinCode { get; set; } = "";
 
-    public bool ScrollBarFullMode { get; set; } = true;
 
     public List<double> RightColumnSkinpartPositions { get; } = [];
     public List<double> LeftColumnSkinpartPositions { get; } = [];
@@ -745,7 +744,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds rightColumnBounds = ElementBounds.Fixed(0, yPosition + skinPartsGroupBarHeight, columnsWidth + padding, columnsHeight - skinPartsGroupBarHeight).FixedRightOf(leftColumnBounds, padding);
         ElementBounds bothColumnBounds = previewAreaBounds.RightCopy(padding + padding, skinPartsGroupBarHeight, 0, 0).WithFixedWidth(leftColumnBounds.fixedWidth + rightColumnBounds.fixedWidth + padding).WithFixedHeight(columnsHeight - skinPartsGroupBarHeight);
         ElementBounds bottomButtonsBarBounds = ElementBounds.Fixed(horizontalOffset, padding, buttonsBarWidth, buttonsBarHeight).FixedUnder(leftColumnBounds);
-        ElementBounds skinPartsGroupsTabsBounds = ElementBounds.Fixed(horizontalOffset, yPosition - 1, columnsWidth * 2 + padding, skinPartsGroupBarHeight).FixedRightOf(previewAreaBounds, padding);
+        ElementBounds skinPartsGroupsTabsBounds = ElementBounds.Fixed(horizontalOffset, yPosition - 1, bothColumnBounds.fixedWidth, skinPartsGroupBarHeight).FixedRightOf(previewAreaBounds, padding * 2);
         // preview area
         ElementBounds insetBounds = ElementBounds.Fixed(0, 0, previewWidth, previewInsetHeight).WithParent(previewAreaBounds);
         ElementBounds hideClothingButtonBounds = ElementBounds.Fixed(0, padding + 2, previewWidth + padding - 1, hideClothingHeight).WithParent(previewAreaBounds).FixedUnder(insetBounds);
@@ -758,9 +757,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds openFolderButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(loadedSkinsDropdownBounds, padding);
         ElementBounds refreshSkinsButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(openFolderButtonBounds, padding);
         ElementBounds confirmButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(-padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(refreshSkinsButtonBounds, padding);
-
-        ElementBounds scrollBarModeButtonBounds = ElementBounds.Fixed(480, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
-        ElementBounds exportAsCPMModelButtonBounds = ElementBounds.Fixed(306, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
+        ElementBounds exportAsCPMModelButtonBounds = ElementBounds.Fixed(506, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
         // skin parts
         ElementBounds dropDownSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(skinPartWidht, dropDownheight);
         ElementBounds swatchesSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(colorIconSize, colorIconSize);
@@ -823,20 +820,19 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         composer.AddInset(hideClothingButtonBounds, 0, 1);
 
         composer.AddToggleButton(Lang.Get("playermodellib:gui-button-hide-clothing"), smallfont, OnToggleDressOnOff, hideClothingButtonBounds, "showdressedtoggle");
-        composer.AddButton(Lang.Get("Randomize"), () => OnRandomizeSkin([]), randomizeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Last selection"), () => OnRandomizeSkin(GetPreviousSelection()), lastSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Export"), OnExport, exportSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Import"), OnImport, importSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-ramdomize"), () => OnRandomizeSkin([]), randomizeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-last-selection"), () => OnRandomizeSkin(GetPreviousSelection()), lastSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-export-skin"), OnExport, exportSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-import-skin"), OnImport, importSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         composer.AddScrollableDropDown(skins.ToArray(), skins.ToArray(), 0, (variantcode, selected) => OnToggleSkinImport(variantcode), loadedSkinsDropdownBounds, dialogBounds, "dropdown-import-skin");
-        composer.AddButton(Lang.Get("Folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Refresh"), OnRefresh, refreshSkinsButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Confirm Skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Normal);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-open-skins-folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-refresh-skins"), OnRefresh, refreshSkinsButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-confirm-skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Normal);
 
-        composer.AddButton(Lang.Get("Scroll bars mode toggle"), OnScrollBarModeToggle, scrollBarModeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
 
         if (PlayerModelModSystem.Settings.ExportCPMModelButton)
         {
-            composer.AddButton(Lang.Get("Export as CPM model"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+            composer.AddButton(Lang.Get("playermodellib:gui-button-export-skin-as-cpm"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         }
 
         InsetSlotBounds = insetBounds;
@@ -849,7 +845,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
             return;
         }
 
-        ElementBounds scrollBounds = ScrollBarFullMode ? leftColumnBounds : leftColumnScrollBarBounds;
+        ElementBounds scrollBounds = leftColumnBounds;
         if (currentSkinPartTabCode == presetTabName)
         {
             scrollBounds = bothColumnBounds;
@@ -936,7 +932,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
                 (composer.GetElement("skinparts-left-scrollbar") as GuiElementIndexScroller)?.SetMaxIndex(LeftColumnSkinpartPositions.Count - 1);
 
                 composer.EndClip();
-                composer.AddIndexScroller(OnNewScrollbarValueSkinRight, rightColumnScrollBarBounds, 0, "skinparts-right-scrollbar", ScrollBarFullMode ? rightColumnBounds : rightColumnScrollBarBounds);
+                composer.AddIndexScroller(OnNewScrollbarValueSkinRight, rightColumnScrollBarBounds, 0, "skinparts-right-scrollbar", rightColumnBounds);
                 composer.BeginClip(rightColumnClipBounds);
 
                 previousSkinPartBounds = ElementBounds.Fixed(0, 0);
@@ -1014,11 +1010,10 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds openFolderButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(loadedSkinsDropdownBounds, padding);
         ElementBounds refreshSkinsButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(openFolderButtonBounds, padding);
         ElementBounds confirmButtonBounds = ElementBounds.Fixed(0, 0).WithFixedOffset(-padding, padding).WithParent(bottomButtonsBarBounds).WithFixedPadding(8, 6).RightOf(refreshSkinsButtonBounds, padding);
-
-        ElementBounds exportAsCPMModelButtonBounds = ElementBounds.Fixed(306, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
+        ElementBounds exportAsCPMModelButtonBounds = ElementBounds.Fixed(506, -16).WithFixedHeight(24).WithFixedPadding(8, 0);
         // skin parts
         ElementBounds dropDownSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(skinPartWidht, dropDownheight);
-        ElementBounds swatchesSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(colorIconSize, colorIconSize);
+        ElementBounds swatchesSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(colorIconSize - 1, colorIconSize);
         ElementBounds colorPickerSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(skinPartWidht, colorPickerheight);
         ElementBounds canvasSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(skinPartWidht, canvasHeight);
         ElementBounds skinPartTitleBounds = ElementBounds.Fixed(0, 0).WithFixedSize(skinPartWidht, 30);
@@ -1042,18 +1037,18 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         composer.AddInset(hideClothingButtonBounds, 0, 1);
 
         composer.AddToggleButton(Lang.Get("playermodellib:gui-button-hide-clothing"), smallfont, OnToggleDressOnOff, hideClothingButtonBounds, "showdressedtoggle");
-        composer.AddButton(Lang.Get("Randomize"), () => OnRandomizeSkin([]), randomizeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Last selection"), () => OnRandomizeSkin(GetPreviousSelection()), lastSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Export"), OnExport, exportSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Import"), OnImport, importSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-ramdomize"), () => OnRandomizeSkin([]), randomizeButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-last-selection"), () => OnRandomizeSkin(GetPreviousSelection()), lastSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-export-skin"), OnExport, exportSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-import-skin"), OnImport, importSelectionButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         composer.AddScrollableDropDown(skins.ToArray(), skins.ToArray(), 0, (variantcode, selected) => OnToggleSkinImport(variantcode), loadedSkinsDropdownBounds, dialogBounds, "dropdown-import-skin");
-        composer.AddButton(Lang.Get("Refresh"), OnRefresh, refreshSkinsButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
-        composer.AddButton(Lang.Get("Confirm Skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-refresh-skins"), OnRefresh, refreshSkinsButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-open-skins-folder"), OpenSkinsFolder, openFolderButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+        composer.AddButton(Lang.Get("playermodellib:gui-button-confirm-skin"), OnNextImpl, confirmButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
 
         if (PlayerModelModSystem.Settings.ExportCPMModelButton)
         {
-            composer.AddButton(Lang.Get("Export as CPM model"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
+            composer.AddButton(Lang.Get("playermodellib:gui-button-export-skin-as-cpm"), OnExportAsCPMModel, exportAsCPMModelButtonBounds, CairoFont.WhiteSmallText(), EnumButtonStyle.Small);
         }
 
         InsetSlotBounds = insetBounds;
@@ -1070,7 +1065,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         }
 
 
-        composer.AddIndexScroller(OnNewScrollbarValueSkinLeft, leftColumnScrollBarBounds, 0, "skinparts-left-scrollbar", leftColumnScrollBarBounds);
+        composer.AddIndexScroller(OnNewScrollbarValueSkinLeft, leftColumnScrollBarBounds, 0, "skinparts-left-scrollbar", leftColumnBounds);
         composer.BeginClip(leftColumnClipBounds);
 
 
@@ -1130,7 +1125,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
                 (composer.GetElement("skinparts-left-scrollbar") as GuiElementIndexScroller)?.SetMaxIndex(LeftColumnSkinpartPositions.Count - 1);
 
                 composer.EndClip();
-                composer.AddIndexScroller(OnNewScrollbarValueSkinRight, rightColumnScrollBarBounds, 0, "skinparts-right-scrollbar", rightColumnScrollBarBounds);
+                composer.AddIndexScroller(OnNewScrollbarValueSkinRight, rightColumnScrollBarBounds, 0, "skinparts-right-scrollbar", rightColumnBounds);
                 composer.BeginClip(rightColumnClipBounds);
 
                 previousSkinPartBounds = ElementBounds.Fixed(0, 0).WithFixedSize(0, 0).WithParent(rightColumnScrollableBounds);
@@ -1289,7 +1284,7 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         ElementBounds partBounds = ElementBounds.Fixed(0, 0)
             .WithFixedSize(skinPartTitleBounds.fixedWidth, skinPartTitleBounds.fixedHeight + padding + (swatchesSkinPartBounds.fixedHeight + padding) * rowsNumber + padding)
             .WithParent(parentBounds)
-            .FixedUnder(previous, padding);
+            .FixedUnder(previous, 0);
         skinPartTitleBounds = skinPartTitleBounds.FlatCopy().WithFixedOffset(padding, padding).FixedGrow(-padding * 2).WithParent(partBounds);
         swatchesSkinPartBounds = swatchesSkinPartBounds.FlatCopy().WithFixedOffset(padding * 2, padding).WithParent(partBounds).FixedUnder(skinPartTitleBounds, padding);
 
@@ -1884,12 +1879,6 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
         }
 
         CurrentTab = GameMath.Clamp(CurrentTab + 1, 0, TabsEnabled.Count(entry => entry.Value));
-        ComposeGuis();
-        return true;
-    }
-    public bool OnScrollBarModeToggle()
-    {
-        ScrollBarFullMode = !ScrollBarFullMode;
         ComposeGuis();
         return true;
     }

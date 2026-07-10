@@ -286,8 +286,6 @@ public sealed class CustomModelsSystem : ModSystem
             ?.Where(part => part.Enabled)
             .ToArray() ?? [];
 
-        FixDefaultSkinParts(parts);
-
         Dictionary<string, SkinnablePart> partsByCode = LoadParts(_api, parts, _defaultModelCode);
 
         FixColBreak(parts, _defaultModelCode);
@@ -1019,43 +1017,6 @@ public sealed class CustomModelsSystem : ModSystem
         foreach (ShapeElement element in customShape.Elements)
         {
             AddAttachmentPoints(element, attachmentPointsByElement, modelCode, createMissingCuboids);
-        }
-    }
-    private static void FixDefaultSkinParts(SkinnablePartExtended[] parts)
-    {
-        foreach (SkinnablePartExtended part in parts)
-        {
-            switch (part.Code)
-            {
-                case "underwear":
-                case "baseskin":
-                    part.TextureTarget = "seraph";
-                    part.TargetSkinParts = ["base"];
-                    part.OverlayMode = EnumTextureOverlayMode.Normal;
-                    break;
-
-                case "haircolor":
-                    part.TextureTarget = "hair";
-                    part.TargetSkinParts = ["beard", "mustache", "hairextra", "hairbase"];
-                    break;
-
-                case "facialexpression":
-                    foreach (SkinnablePartVariant variant in part.Variants)
-                    {
-                        string code = variant.Code;
-                        variant.Shape.Base = $"playermodellib:seraphfaces/{code}";
-                    }
-                    break;
-
-                case "eyecolor":
-                    part.TextureTarget = "playermodellib-iris";
-                    part.TargetSkinParts = ["facialexpression"];
-                    part.OverlayMode = EnumTextureOverlayMode.Normal;
-                    break;
-
-                default:
-                    break;
-            }
         }
     }
     private void FixColBreak(SkinnablePartExtended[] parts, string modelCodeForLogging)
