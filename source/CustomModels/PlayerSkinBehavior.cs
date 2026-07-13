@@ -529,7 +529,7 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
         ShapeReplacementUtil.ExportingShape = false;
         if (shape == null || ClientApi == null) return;
 
-        string cpmModelFolder = System.IO.Path.Combine(GamePaths.ModConfig, "custom-player-models", CurrentModelCode.Replace(':', '-'));
+        string cpmModelFolder = System.IO.Path.Combine(GamePaths.ModConfig, "custom-player-models-export", CurrentModelCode.Replace(':', '-'));
 
         string prefix = CustomModelsSystem.GetTextureCodePrefix(CurrentModelCode);
         string modelCode = CurrentModelCode.Replace(':', '-');
