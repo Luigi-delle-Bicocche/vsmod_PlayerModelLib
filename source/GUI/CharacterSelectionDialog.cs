@@ -2112,6 +2112,11 @@ public sealed class GuiDialogCreateCustomCharacter : GuiDialogCreateCharacter
             availableClasses = CharacterSystem.characterClasses;
         }
 
+        if (PlayerModelModSystem.Settings.DisableCustomClassesAndTraits)
+        {
+            return CharacterSystem.characterClasses.Where(element => !system.ExclusiveClasses.Contains(element.Code) || exclusiveClassesForModel.Contains(element.Code)).ToList();
+        }
+
         availableClasses = availableClasses.Where(element => !system.ExclusiveClasses.Contains(element.Code) || exclusiveClassesForModel.Contains(element.Code));
 
         availableClasses = availableClasses.Where(element => !skippedClassesForModel.Contains(element.Code)).Where(element => element.Enabled);
