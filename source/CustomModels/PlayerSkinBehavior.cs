@@ -1317,7 +1317,17 @@ public class PlayerSkinBehavior : EntityBehavior, ITexPositionSource
 
         foreach (string code in data.MainTextureCodes)
         {
-            CompositeTexture? texture = data.MainTextures[code];
+            if (!data.MainTextures.TryGetValue(code, out CompositeTexture? texture))
+            {
+                string mainTextures = "";
+                if (data.MainTextures.Count > 0)
+                {
+                    mainTextures = data.MainTextures.Select(entry => entry.Key).Aggregate((a, b) => $"a, b");
+                }
+                Log.Error(ClientApi, this, $"Failed to find main texture code '{code}' for model '{CurrentModelCode}'. Existing main textures: {mainTextures}");
+                continue;
+            }
+
             if (texture != null)
             {
                 AddTexture(code, texture.Base);
