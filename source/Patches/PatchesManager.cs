@@ -16,6 +16,9 @@ public static class PatchesManager
     public const string GeneralPatchesId = HarmonyIdPrefix + "General";
     public const string StatsPatchesId = HarmonyIdPrefix + "Stats";
     public const string OffThreadPatchesId = HarmonyIdPrefix + "OffThread";
+    public const string ItemPermissionsId = HarmonyIdPrefix + "ItemPermissions";
+    public const string WearPermissionsId = HarmonyIdPrefix + "WearPermissions";
+    public const string OvhWearPermissionsId = HarmonyIdPrefix + "WearPermissionsCO";
 
 
     public static void Patch(ICoreAPI api)
@@ -68,6 +71,9 @@ public static class PatchesManager
         new Harmony(TranspilerPatchesId).PatchAll();
         OtherPatches.Patch(GeneralPatchesId, api);
         StatsPatches.Patch(StatsPatchesId, api);
+        ItemPermissionsPatches.Patch(ItemPermissionsId, api);
+        WearPermissionsPatches.Patch(WearPermissionsId, api);
+        OvhWearPermissionsPatches.Patch(OvhWearPermissionsId, api);
     }
     private static void PatchClient(ICoreClientAPI api)
     {
@@ -83,6 +89,9 @@ public static class PatchesManager
         new Harmony(TranspilerPatchesId).UnpatchAll(TranspilerPatchesId);
         OtherPatches.Unpatch(GeneralPatchesId);
         StatsPatches.Unpatch(StatsPatchesId);
+        ItemPermissionsPatches.Unpatch(ItemPermissionsId);
+        WearPermissionsPatches.Unpatch(WearPermissionsId);
+        OvhWearPermissionsPatches.Unpatch(OvhWearPermissionsId);
     }
     private static void UnpatchClient()
     {
