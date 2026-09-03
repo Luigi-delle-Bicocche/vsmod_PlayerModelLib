@@ -151,7 +151,7 @@
     <!-- Windows symlink -->
     <Exec Condition="'$(OS)' == 'Windows_NT'" Command="mklink /D &quot;$(OutputPath)assets&quot; &quot;$(ProjectDir)\resources\assets&quot;" />
     <!-- Linux/macOS symlink -->
-    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="ln -s &quot;$(OutputPath)/assets&quot; &quot;$(ProjectDir)/resources/assets&quot;" />
+    <Exec Condition="'$(OS)' != 'Windows_NT'" Command="ln -sfn &quot;$(ProjectDir)/resources/assets&quot; &quot;$(OutputPath)assets&quot;" />
   </Target>
 
   <!-- Archives output directory into zip and puts it into Releases folder -->
