@@ -56,7 +56,7 @@ namespace PlayerModelLib
             string? code = traitObj["code"]?.ToObject<string>();
             if (string.IsNullOrEmpty(code)) return;
 
-            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood")) return;
+            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood")) return;
 
             TraitItemPermissionsConfig? cfg;
             try { cfg = traitObj.ToObject<TraitItemPermissionsConfig>(); }
