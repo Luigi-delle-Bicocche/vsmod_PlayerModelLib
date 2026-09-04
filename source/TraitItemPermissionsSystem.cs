@@ -80,6 +80,7 @@ namespace PlayerModelLib
 
             if (cfg.DisallowedItems != null) AddIds(api, cfg.DisallowedItems, existing.DisallowedIds);
             if (cfg.DisallowedInteract != null) AddIds(api, cfg.DisallowedInteract, existing.DisallowedInteractIds);
+            if (cfg.DisallowedAttack != null) AddIds(api, cfg.DisallowedAttack, existing.DisallowedAttackIds);
             if (cfg.AllowedFood == null) return;
             foreach (KeyValuePair<string, FoodOverrideJson> kv in cfg.AllowedFood)
             {
@@ -194,6 +195,19 @@ namespace PlayerModelLib
             }
             return false;
         }
+
+        public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll)
+        {
+            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || coll == null) return true;
+            foreach (string trait in GetPlayerTraitCodes(player))
+            {
+                TraitItemPermissions? perm;
+                if (_byTrait.TryGetValue(trait, out perm) && (perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id)))
+                    return false;
+            }
+            return true;
+        }
+
     }
 
     public class FoodOverrideJson
@@ -207,6 +221,7 @@ namespace PlayerModelLib
     {
         public string[] DisallowedItems { get; set; } = new string[0];
         public string[] DisallowedInteract { get; set; } = new string[0];
+        public string[] DisallowedAttack { get; set; } = new string[0];
         public Dictionary<string, FoodOverrideJson> AllowedFood { get; set; } = new Dictionary<string, FoodOverrideJson>();
     }
 
@@ -214,6 +229,7 @@ namespace PlayerModelLib
     {
         public HashSet<int> DisallowedIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedInteractIds { get; set; } = new HashSet<int>();
+        public HashSet<int> DisallowedAttackIds { get; set; } = new HashSet<int>();
         public Dictionary<int, FoodNutritionProperties> AllowedFoodOverrides { get; set; } = new Dictionary<int, FoodNutritionProperties>();
     }
 }

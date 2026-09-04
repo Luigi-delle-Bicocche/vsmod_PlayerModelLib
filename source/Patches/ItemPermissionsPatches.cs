@@ -4,6 +4,7 @@ using System.Reflection;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
+using Vintagestory.API.Config;
 using Vintagestory.API.Server;
 
 namespace PlayerModelLib
@@ -11,6 +12,8 @@ namespace PlayerModelLib
     public static class ItemPermissionsPatches
     {
         private static Harmony? _harmony;
+
+        private const string BlockedAnimation = "playermodellib-blocked";
 
         public static void Patch(string harmonyId, ICoreAPI api)
         {
@@ -44,6 +47,30 @@ namespace PlayerModelLib
                 }
                 harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(OnHeldUseStopPrefix))));
 
+                m = t.GetMethod(nameof(CollectibleObject.GetHeldTpHitAnimation), AccessTools.all);
+                if (m == null)
+                {
+                    Log.Warn(api, typeof(ItemPermissionsPatches), "Could not find CollectibleObject.GetHeldTpHitAnimation");
+                    return;
+                }
+                harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(GetHeldTpHitAnimationPrefix))));
+
+                m = t.GetMethod(nameof(CollectibleObject.GetHeldTpUseAnimation), AccessTools.all);
+                if (m == null)
+                {
+                    Log.Warn(api, typeof(ItemPermissionsPatches), "Could not find CollectibleObject.GetHeldTpUseAnimation");
+                    return;
+                }
+                harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(GetHeldTpUseAnimationPrefix))));
+
+                m = t.GetMethod(nameof(CollectibleObject.OnHeldAttackStart), AccessTools.all);
+                if (m == null)
+                {
+                    Log.Warn(api, typeof(ItemPermissionsPatches), "Could not find CollectibleObject.OnHeldAttackStart");
+                    return;
+                }
+                harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(OnHeldAttackStartPrefix))));
+
                 m = t.GetMethod(nameof(CollectibleObject.GetNutritionProperties), AccessTools.all);
                 if (m == null)
                 {
@@ -68,11 +95,11 @@ namespace PlayerModelLib
         }
 
         private static void SendDisallowed(EntityPlayer player)
-        { 
-            string msg = "placeholder";
-            if (player.Player is IServerPlayer sp) sp.SendIngameError("placeholder", msg);
+        {
+            string msg = Lang.Get("playermodellib:itemdisallowed");
+            if (player.Player is IServerPlayer sp) sp.SendIngameError("itemdisallowed", msg);
             else if (player.Api is ICoreClientAPI capi && player.PlayerUID == capi.World.Player?.PlayerUID)
-                capi.TriggerIngameError(null, "placeholder", msg);
+                capi.TriggerIngameError(null, "itemdisallowed", msg);
         }
 
         private static TraitItemPermissionsSystem? ForPlayer(EntityPlayer player)
@@ -92,10 +119,11 @@ namespace PlayerModelLib
             return false;
         }
 
-        private static bool ShouldBlockUse(EntityPlayer player, CollectibleObject coll)
+        private static bool ShouldBlockUse(EntityPlayer player, CollectibleObject coll, EnumHandInteract useType)
         {
             TraitItemPermissionsSystem? inst = ForPlayer(player);
             if (inst == null) return false;
+            if (useType == EnumHandInteract.HeldItemAttack) return !inst.IsAttackAllowed(player, coll);
             if (inst.TryGetFoodOverride(player, coll, out _)) return false;
             return !inst.IsInteractAllowed(player, coll);
         }
@@ -113,7 +141,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            if (ShouldBlockUse(player, coll)) { __result = EnumHandInteract.None; return false; }
+            if (ShouldBlockUse(player, coll, player.Controls.HandUse)) { __result = EnumHandInteract.None; return false; }
             return true;
         }
 
@@ -122,7 +150,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            if (ShouldBlockUse(player, coll)) return false;
+            if (ShouldBlockUse(player, coll, useType)) return false;
             return true;
         }
 
@@ -138,6 +166,48 @@ namespace PlayerModelLib
                 __result = props;
             else if (!inst.IsInteractAllowed(player, coll))
                 __result = null!;
+        }
+
+        private static bool TryBlockAttack(EntityPlayer player, CollectibleObject coll, ref EnumHandHandling handling)
+        {
+            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            if (inst == null) return true;
+            if (inst.IsAttackAllowed(player, coll)) return true;
+            handling = EnumHandHandling.PreventDefault;
+            SendDisallowed(player);
+            return false;
+        }
+
+        private static bool OnHeldAttackStartPrefix(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, ref EnumHandHandling handling)
+        {
+            CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
+            EntityPlayer? player = byEntity as EntityPlayer;
+            if (coll == null || player == null) return true;
+            return TryBlockAttack(player, coll, ref handling);
+        }
+
+        private static bool GetHeldTpHitAnimationPrefix(ItemSlot slot, Entity byEntity, ref string __result)
+        {
+            CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
+            EntityPlayer? player = byEntity as EntityPlayer;
+            if (coll == null || player == null) return true;
+            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            if (inst == null || inst.IsAttackAllowed(player, coll)) return true;
+            __result = BlockedAnimation;
+            return false;
+        }
+
+        private static bool GetHeldTpUseAnimationPrefix(ItemSlot activeHotbarSlot, Entity forEntity, ref string __result)
+        {
+            CollectibleObject? coll = activeHotbarSlot != null && activeHotbarSlot.Itemstack != null ? activeHotbarSlot.Itemstack.Collectible : null;
+            EntityPlayer? player = forEntity as EntityPlayer;
+            if (coll == null || player == null) return true;
+            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            if (inst == null) return true;
+            if (inst.TryGetFoodOverride(player, coll, out _)) return true;
+            if (inst.IsInteractAllowed(player, coll)) return true;
+            __result = BlockedAnimation;
+            return false;
         }
     }
 }

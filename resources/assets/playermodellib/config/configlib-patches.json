@@ -158,6 +158,12 @@
       "type": "boolean",
       "ingui": "playermodellib:setting-export_model_button",
       "default": true
+    },
+    {
+      "code": "disable_class_item_restrictions",
+      "type": "boolean",
+      "ingui": "playermodellib:setting-disable_class_item_restrictions",
+      "default": false
     }
   ]
 }
