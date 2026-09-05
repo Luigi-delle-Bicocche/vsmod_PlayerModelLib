@@ -194,8 +194,6 @@ namespace PlayerModelLib
             FoodNutritionProperties? props;
             if (inst.TryGetFoodOverride(player, coll, out props))
                 __result = props;
-            else if (!inst.IsInteractAllowed(player, coll))
-                __result = null!;
         }
 
         private static bool TryBlockAttack(EntityPlayer player, CollectibleObject coll, ref EnumHandHandling handling)

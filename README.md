@@ -298,8 +298,25 @@ JSON API documentation:
     }
 }
 ```
+### Trait item permissions
 
+Traits can restrict which items a character can use to attack or interact with and can be used to override food items values and edibility.
+For food overrides, you can specify Satiety, Health and the food category. These values are optional and will use the item's base value if omitted, provided it has any.
+Items that are explicitly allowed as food will not be blocked if listed in DisallowedInteract.
 
+```
+{
+  "code": "exampletrait",
+  "DisallowedItems": ["game:spear*"], // Blocks both attacking and throwing the spear. Disallows both attack and interaction.
+  "DisallowedAttack": [ "game:blade-falx-copper-*" ], // Blocks attacking only
+  "DisallowedInteract": [ "game:bow-*", "game:bread-*" ], // Blocks use interaction only (includes eating). This makes the bow unusable and the bread inedible
+  "AllowedFood": {
+    "game:fruit-*": { "Health": 2 }, // Overrides fruit to give health, leaves satiety and food category untouched
+    "game:redmeat-raw-*": { "Satiety": 200, "FoodCategory": "Protein" }, // Makes raw meat edible
+    "game:charcoal": {} // Makes charcoal edible, but gives no nutrition
+  }
+}
+```
 
 If you want to make your models be compatible with vanilla and modded animations there are two ways you can choose:
 
