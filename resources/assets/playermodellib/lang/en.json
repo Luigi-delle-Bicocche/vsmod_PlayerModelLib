@@ -62,5 +62,7 @@
   "setting-comment-multi_thread_payer_shape_generation": "Moves player model generation into a separate thread, that prevents freezes on player entity update, but can cause issues related to multi-threading.",
   "setting-comment-disable_class_item_restrictions": "When enabled traits will not block using items/food or change food values",
 
-  "itemdisallowed": "Your traits prevent you from using this item"
+  "itemdisallowed": "Your traits forbid using this",
+  "tooltiptext-itemnotallowed": "You cannot use this",
+  "tooltiptext-foodnotallowed": "Your traits makes this inedible"
 }

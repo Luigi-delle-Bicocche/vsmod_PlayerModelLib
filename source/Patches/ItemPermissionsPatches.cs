@@ -1,11 +1,13 @@
 using HarmonyLib;
 using OverhaulLib.Utils;
 using System.Reflection;
+using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
 using Vintagestory.API.Server;
+using Vintagestory.GameContent;
 
 namespace PlayerModelLib
 {
@@ -78,6 +80,14 @@ namespace PlayerModelLib
                     return;
                 }
                 harmony.Patch(m, postfix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(GetNutritionPropertiesPostfix))));
+
+                m = t.GetMethod(nameof(CollectibleObject.GetHeldItemInfo), AccessTools.all);
+                if (m == null)
+                {
+                    Log.Warn(api, typeof(ItemPermissionsPatches), "Could not find CollectibleObject.GetHeldItemInfo");
+                    return;
+                }
+                harmony.Patch(m, postfix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(GetHeldItemInfoPostfix))));
                 _harmony = harmony;
             }
             catch (Exception ex)
@@ -94,8 +104,9 @@ namespace PlayerModelLib
             _harmony = null;
         }
 
-        private static void SendDisallowed(EntityPlayer player)
+        private static void SendDisallowed(EntityPlayer player, CollectibleObject coll)
         {
+            if (coll != null && coll.NutritionProps != null) return;
             string msg = Lang.Get("playermodellib:itemdisallowed");
             if (player.Player is IServerPlayer sp) sp.SendIngameError("itemdisallowed", msg);
             else if (player.Api is ICoreClientAPI capi && player.PlayerUID == capi.World.Player?.PlayerUID)
@@ -108,14 +119,33 @@ namespace PlayerModelLib
             return api.ModLoader.GetModSystem<TraitItemPermissionsSystem>();
         }
 
-        private static bool TryBlockInteract(EntityPlayer player, CollectibleObject coll, ref EnumHandHandling handling)
+        private static bool TryBlockInteract(EntityPlayer player, CollectibleObject coll, ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
         {
             TraitItemPermissionsSystem? inst = ForPlayer(player);
             if (inst == null) return true;
             if (inst.TryGetFoodOverride(player, coll, out _)) return true;
             if (inst.IsInteractAllowed(player, coll)) return true;
+            if (firstEvent && blockSel != null && entitySel == null && byEntity.Controls.ShiftKey && TryGroundStore(coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling)) return false;
             handling = EnumHandHandling.PreventDefault;
-            SendDisallowed(player);
+            SendDisallowed(player, coll);
+            return false;
+        }
+
+        private static bool TryGroundStore(CollectibleObject coll, ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
+        {
+            if (coll.CollectibleBehaviors == null) return false;
+            foreach (CollectibleBehavior behavior in coll.CollectibleBehaviors)
+            {
+                if (behavior is CollectibleBehaviorGroundStorable groundStorable)
+                {
+                    EnumHandHandling bhHandHandling = EnumHandHandling.NotHandled;
+                    EnumHandling bhHandling = EnumHandling.PassThrough;
+                    groundStorable.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref bhHandHandling, ref bhHandling);
+                    if (bhHandHandling == EnumHandHandling.NotHandled && bhHandling == EnumHandling.PassThrough) return false;
+                    handling = bhHandHandling;
+                    return true;
+                }
+            }
             return false;
         }
 
@@ -133,7 +163,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            return TryBlockInteract(player, coll, ref handling);
+            return TryBlockInteract(player, coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
         }
 
         private static bool OnHeldUseStepPrefix(float secondsPassed, ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, ref EnumHandInteract __result)
@@ -174,7 +204,7 @@ namespace PlayerModelLib
             if (inst == null) return true;
             if (inst.IsAttackAllowed(player, coll)) return true;
             handling = EnumHandHandling.PreventDefault;
-            SendDisallowed(player);
+            SendDisallowed(player, coll);
             return false;
         }
 
@@ -208,6 +238,20 @@ namespace PlayerModelLib
             if (inst.IsInteractAllowed(player, coll)) return true;
             __result = BlockedAnimation;
             return false;
+        }
+
+        private static void GetHeldItemInfoPostfix(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
+        {
+            if (dsc == null || !(world is IClientWorldAccessor cworld)) return;
+            EntityPlayer? player = cworld.Player != null ? cworld.Player.Entity as EntityPlayer : null;
+            CollectibleObject? coll = inSlot != null && inSlot.Itemstack != null ? inSlot.Itemstack.Collectible : null;
+            if (player == null || coll == null) return;
+            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            if (inst == null) return;
+            if (inst.TryGetFoodOverride(player, coll, out _)) return;
+            if (inst.IsInteractAllowed(player, coll)) return;
+            string key = coll.NutritionProps != null ? "playermodellib:tooltiptext-foodnotallowed" : "playermodellib:tooltiptext-itemnotallowed";
+            dsc.AppendLine("<font color=\"#ff8484\">" + Lang.Get(key) + "</font>");
         }
     }
 }
