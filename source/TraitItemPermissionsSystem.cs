@@ -9,6 +9,7 @@ namespace PlayerModelLib
     public sealed class TraitItemPermissionsSystem : ModSystem
     {
         private readonly Dictionary<string, TraitItemPermissions> _byTrait = new();
+        private readonly Dictionary<int, HashSet<string>> _exclusiveItemOwners = new();
 
         public override double ExecuteOrder() => 0.31;
 
@@ -20,11 +21,13 @@ namespace PlayerModelLib
         public override void Dispose()
         {
             _byTrait.Clear();
+            _exclusiveItemOwners.Clear();
         }
 
         private void Load(ICoreAPI api)
         {
             _byTrait.Clear();
+            _exclusiveItemOwners.Clear();
             foreach (KeyValuePair<AssetLocation, JToken> entry in api.Assets.GetMany<JToken>(api.Logger, "config/traits"))
             {
                 try
@@ -44,6 +47,23 @@ namespace PlayerModelLib
                     Log.Error(api, typeof(TraitItemPermissionsSystem), "Failed to parse traits " + entry.Key + ": " + ex.Message);
                 }
             }
+            foreach (KeyValuePair<string, TraitItemPermissions> kv in _byTrait)
+            {
+                RegisterExclusiveOwners(_exclusiveItemOwners, kv.Value.ExclusiveItemIds, kv.Key);
+            }
+        }
+
+        private static void RegisterExclusiveOwners(Dictionary<int, HashSet<string>> ownersById, HashSet<int> exclusiveIds, string traitCode)
+        {
+            foreach (int id in exclusiveIds)
+            {
+                if (!ownersById.TryGetValue(id, out HashSet<string>? owners))
+                {
+                    owners = new HashSet<string>();
+                    ownersById[id] = owners;
+                }
+                owners.Add(traitCode);
+            }
         }
 
         private static bool Has(JObject o, string key)
@@ -56,7 +76,8 @@ namespace PlayerModelLib
             string? code = traitObj["code"]?.ToObject<string>();
             if (string.IsNullOrEmpty(code)) return;
 
-            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood")) return;
+            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood")
+                && !Has(traitObj, "ExclusiveItems")) return;
 
             TraitItemPermissionsConfig? cfg;
             try { cfg = traitObj.ToObject<TraitItemPermissionsConfig>(); }
@@ -81,6 +102,7 @@ namespace PlayerModelLib
             if (cfg.DisallowedItems != null) AddIds(api, cfg.DisallowedItems, existing.DisallowedIds);
             if (cfg.DisallowedInteract != null) AddIds(api, cfg.DisallowedInteract, existing.DisallowedInteractIds);
             if (cfg.DisallowedAttack != null) AddIds(api, cfg.DisallowedAttack, existing.DisallowedAttackIds);
+            if (cfg.ExclusiveItems != null) AddIds(api, cfg.ExclusiveItems, existing.ExclusiveItemIds);
             if (cfg.AllowedFood == null) return;
             foreach (KeyValuePair<string, FoodOverrideJson> kv in cfg.AllowedFood)
             {
@@ -93,7 +115,7 @@ namespace PlayerModelLib
                     if (existing.AllowedFoodOverrides.ContainsKey(coll.Id))
                         Log.Warn(api, typeof(TraitItemPermissionsSystem), "Food override for '" + coll.Code + "' in trait '" + traitCode + "' from '" + source + "' overwrites previous mod value.");
 
-                    FoodNutritionProperties baseProps = coll.NutritionProps != null ? coll.NutritionProps.Clone() : new FoodNutritionProperties
+                    FoodNutritionProperties baseProps = GetBaseNutritionProps(api, coll) ?? new FoodNutritionProperties
                     {
                         FoodCategory = EnumFoodCategory.NoNutrition, Satiety = 0, Health = 0
                     };
@@ -112,6 +134,21 @@ namespace PlayerModelLib
                     existing.AllowedFoodOverrides[coll.Id] = baseProps;
                 }
             }
+        }
+
+        public static FoodNutritionProperties? GetBaseNutritionProps(ICoreAPI api, CollectibleObject coll)
+        {
+            if (coll.NutritionProps != null) return coll.NutritionProps.Clone();
+            try
+            {
+                WaterTightContainableProps? wtp = coll.Attributes?["waterTightContainerProps"]?.AsObject<WaterTightContainableProps>();
+                if (wtp?.NutritionPropsPerLitre != null) return wtp.NutritionPropsPerLitre.Clone();
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(api, typeof(TraitItemPermissionsSystem), "Failed reading per-litre nutrition for '" + coll.Code + "': " + ex.Message);
+            }
+            return null;
         }
 
         private static void AddIds(ICoreAPI api, string[] wildcards, HashSet<int> target)
@@ -170,13 +207,7 @@ namespace PlayerModelLib
         public bool IsInteractAllowed(EntityPlayer player, CollectibleObject coll)
         {
             if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || coll == null) return true;
-            foreach (string trait in GetPlayerTraitCodes(player))
-            {
-                TraitItemPermissions? perm;
-                if (_byTrait.TryGetValue(trait, out perm) && (perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id)))
-                    return false;
-            }
-            return true;
+            return IsItemUseAllowed(player, coll, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id));
         }
 
         public bool TryGetFoodOverride(EntityPlayer player, CollectibleObject coll, out FoodNutritionProperties props)
@@ -198,13 +229,26 @@ namespace PlayerModelLib
 
         public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll)
         {
-            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || coll == null) return true;
+            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
+            return IsItemUseAllowed(player, coll, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id));
+        }
+
+        private bool IsItemUseAllowed(EntityPlayer player, CollectibleObject coll, System.Func<TraitItemPermissions, bool> isDeniedByTrait)
+        {
+            HashSet<string>? owners;
+            bool isExclusive = _exclusiveItemOwners.TryGetValue(coll.Id, out owners) && owners.Count > 0;
+            bool hasOwnerTrait = false;
+
             foreach (string trait in GetPlayerTraitCodes(player))
             {
                 TraitItemPermissions? perm;
-                if (_byTrait.TryGetValue(trait, out perm) && (perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id)))
+                if (_byTrait.TryGetValue(trait, out perm) && isDeniedByTrait(perm))
                     return false;
+                if (isExclusive && owners!.Contains(trait)) hasOwnerTrait = true;
             }
+
+            if (isExclusive && !hasOwnerTrait) return false;
+
             return true;
         }
 
@@ -222,6 +266,7 @@ namespace PlayerModelLib
         public string[] DisallowedItems { get; set; } = new string[0];
         public string[] DisallowedInteract { get; set; } = new string[0];
         public string[] DisallowedAttack { get; set; } = new string[0];
+        public string[] ExclusiveItems { get; set; } = new string[0];
         public Dictionary<string, FoodOverrideJson> AllowedFood { get; set; } = new Dictionary<string, FoodOverrideJson>();
     }
 
@@ -230,6 +275,7 @@ namespace PlayerModelLib
         public HashSet<int> DisallowedIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedInteractIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedAttackIds { get; set; } = new HashSet<int>();
+        public HashSet<int> ExclusiveItemIds { get; set; } = new HashSet<int>();
         public Dictionary<int, FoodNutritionProperties> AllowedFoodOverrides { get; set; } = new Dictionary<int, FoodNutritionProperties>();
     }
 }
