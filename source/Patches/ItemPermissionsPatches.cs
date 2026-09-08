@@ -114,30 +114,15 @@ namespace PlayerModelLib
             _harmony = null;
         }
 
-        private static void SendDisallowed(EntityPlayer player, CollectibleObject coll)
-        {
-            if (coll.NutritionProps != null) return; // dont send the error msg on purpose like vanilla inedible items do. if users are confused (can't read tooltip) then this could be reinstated
-            string msg = Lang.Get("playermodellib:itemdisallowed");
-            if (player.Player is IServerPlayer sp) sp.SendIngameError("itemdisallowed", msg);
-            else if (player.Api is ICoreClientAPI capi && player.PlayerUID == capi.World.Player?.PlayerUID)
-                capi.TriggerIngameError(null, "itemdisallowed", msg);
-        }
-
-        private static TraitItemPermissionsSystem? ForPlayer(EntityPlayer player)
-        {
-            ICoreAPI api = player.Api;
-            return api.ModLoader.GetModSystem<TraitItemPermissionsSystem>();
-        }
-
         private static bool TryBlockInteract(EntityPlayer player, CollectibleObject coll, ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection? entitySel, bool firstEvent, ref EnumHandHandling handling)
         {
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return true;
             if (inst.TryGetFoodOverride(player, coll, out _)) return true;
             if (inst.IsInteractAllowed(player, coll)) return true;
             if (firstEvent && blockSel != null && entitySel == null && byEntity.Controls.ShiftKey && TryGroundStore(coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling)) return false;
             handling = EnumHandHandling.PreventDefault;
-            SendDisallowed(player, coll);
+            TraitItemPermissionsSystem.SendItemDisallowed(player, coll);
             return false;
         }
 
@@ -161,7 +146,7 @@ namespace PlayerModelLib
 
         private static bool ShouldBlockUse(EntityPlayer player, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, EnumHandInteract useType)
         {
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return false;
             if (useType == EnumHandInteract.HeldItemAttack) return !inst.IsAttackAllowed(player, coll);
             if (inst.TryGetFoodOverride(player, coll, out _)) return false;
@@ -239,7 +224,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, useType)) { SendDisallowed(player, coll); return false; }
+            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, useType)) { TraitItemPermissionsSystem.SendItemDisallowed(player, coll); return false; }
             return true;
         }
 
@@ -248,7 +233,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = itemstack != null ? itemstack.Collectible : null;
             EntityPlayer? player = forEntity as EntityPlayer;
             if (coll == null || player == null) return;
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return;
             FoodNutritionProperties? props;
             if (inst.TryGetFoodOverride(player, coll, out props))
@@ -257,11 +242,11 @@ namespace PlayerModelLib
 
         private static bool TryBlockAttack(EntityPlayer player, CollectibleObject coll, ref EnumHandHandling handling)
         {
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return true;
             if (inst.IsAttackAllowed(player, coll)) return true;
             handling = EnumHandHandling.PreventDefault;
-            SendDisallowed(player, coll);
+            TraitItemPermissionsSystem.SendItemDisallowed(player, coll);
             return false;
         }
 
@@ -278,7 +263,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null || inst.IsAttackAllowed(player, coll)) return true;
             __result = BlockedAnimation;
             return false;
@@ -289,7 +274,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = activeHotbarSlot != null && activeHotbarSlot.Itemstack != null ? activeHotbarSlot.Itemstack.Collectible : null;
             EntityPlayer? player = forEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return true;
             if (inst.TryGetFoodOverride(player, coll, out _)) return true;
             if (inst.IsInteractAllowed(player, coll)) return true;
@@ -310,7 +295,7 @@ namespace PlayerModelLib
             }
             CollectibleObject? contentColl = content?.Collectible;
             if (contentColl == null) return;
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return;
             if (!inst.TryGetFoodOverride(player, contentColl, out FoodNutritionProperties? edited) || edited == null)
             {
@@ -334,7 +319,7 @@ namespace PlayerModelLib
             EntityPlayer? player = cworld.Player?.Entity;
             CollectibleObject? coll = inSlot?.Itemstack?.Collectible;
             if (inSlot == null || player == null || coll == null) return;
-            TraitItemPermissionsSystem? inst = ForPlayer(player);
+            TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return;
             if (inst.TryGetFoodOverride(player, coll, out FoodNutritionProperties? edited))
             {

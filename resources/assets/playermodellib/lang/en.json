@@ -63,6 +63,8 @@
   "setting-comment-disable_class_item_restrictions": "When enabled traits will not block using items/food or change food values",
 
   "itemdisallowed": "Your traits forbid using this",
+  "weardisallowed": "Your traits forbid wearing this",
   "tooltiptext-itemnotallowed": "You cannot use this",
-  "tooltiptext-foodnotallowed": "Your traits makes this inedible"
+  "tooltiptext-foodnotallowed": "Your traits makes this inedible",
+  "tooltiptext-wearnotallowed": "You cannot wear this"
 }
