@@ -6,7 +6,6 @@ using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
-using Vintagestory.API.Server;
 using Vintagestory.GameContent;
 
 namespace PlayerModelLib
@@ -118,8 +117,10 @@ namespace PlayerModelLib
         {
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return true;
-            if (inst.TryGetFoodOverride(player, coll, out _)) return true;
-            if (inst.IsInteractAllowed(player, coll)) return true;
+            if (!inst.IsItemRelevant(coll.Id)) return true;
+            HashSet<string> traitCodes = inst.GetPlayerTraitCodes(player);
+            if (inst.TryGetFoodOverride(player, coll, traitCodes, out _)) return true;
+            if (inst.IsInteractAllowed(player, coll, traitCodes)) return true;
             if (firstEvent && blockSel != null && entitySel == null && byEntity.Controls.ShiftKey && TryGroundStore(coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling)) return false;
             handling = EnumHandHandling.PreventDefault;
             TraitItemPermissionsSystem.SendItemDisallowed(player, coll);
@@ -149,9 +150,43 @@ namespace PlayerModelLib
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return false;
             if (useType == EnumHandInteract.HeldItemAttack) return !inst.IsAttackAllowed(player, coll);
-            if (inst.TryGetFoodOverride(player, coll, out _)) return false;
-            if (!inst.IsInteractAllowed(player, coll)) return true;
-            return IsContentBlocked(player, inst, coll, stack, world, out _);
+            if (!inst.IsItemRelevant(coll.Id) && !HasRelevantContent(inst, coll, stack, world, player)) return false;
+            HashSet<string> traitCodes = inst.GetPlayerTraitCodes(player);
+            if (inst.TryGetFoodOverride(player, coll, traitCodes, out _)) return false;
+            if (!inst.IsInteractAllowed(player, coll, traitCodes)) return true;
+            return IsContentBlocked(player, inst, coll, stack, world, traitCodes, out _);
+        }
+
+        private static bool HasRelevantContent(TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, EntityPlayer player)
+        {
+            if (stack == null) return false;
+            if (coll is BlockLiquidContainerBase liquid)
+            {
+                ItemStack? content;
+                try { content = liquid.GetContent(stack); }
+                catch (Exception ex)
+                {
+                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContent failed " + coll.Code + ": " + ex.Message);
+                    return false;
+                }
+                return content?.Collectible != null && inst.IsItemRelevant(content.Collectible.Id);
+            }
+            if (coll is IBlockMealContainer meal)
+            {
+                ItemStack[] contents;
+                try { contents = meal.GetContents(world, stack); }
+                catch (Exception ex)
+                {
+                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContents failed " + coll.Code + ": " + ex.Message);
+                    return false;
+                }
+                if (contents == null) return false;
+                foreach (ItemStack? c in contents)
+                {
+                    if (c?.Collectible != null && inst.IsItemRelevant(c.Collectible.Id)) return true;
+                }
+            }
+            return false;
         }
 
         private static bool IsContentBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, out CollectibleObject? blockedColl)
@@ -160,7 +195,7 @@ namespace PlayerModelLib
             if (stack == null) return false;
             if (coll is BlockLiquidContainerBase liquid)
             {
-                ItemStack? content = null;
+                ItemStack? content;
                 try { content = liquid.GetContent(stack); }
                 catch (Exception ex)
                 {
@@ -200,6 +235,54 @@ namespace PlayerModelLib
         {
             if (inst.TryGetFoodOverride(player, contentColl, out _)) return false;
             return !inst.IsInteractAllowed(player, contentColl);
+        }
+
+        private static bool IsContentBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, HashSet<string> traitCodes, out CollectibleObject? blockedColl)
+        {
+            blockedColl = null;
+            if (stack == null) return false;
+            if (coll is BlockLiquidContainerBase liquid)
+            {
+                ItemStack? content;
+                try { content = liquid.GetContent(stack); }
+                catch (Exception ex)
+                {
+                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContent failed " + coll.Code + ": " + ex.Message);
+                    return false;
+                }
+                if (content?.Collectible != null && IsSingleBlocked(player, inst, content.Collectible, traitCodes))
+                {
+                    blockedColl = content.Collectible;
+                    return true;
+                }
+                return false;
+            }
+            if (coll is IBlockMealContainer meal)
+            {
+                ItemStack[] contents;
+                try { contents = meal.GetContents(world, stack); }
+                catch (Exception ex)
+                {
+                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContents failed " + coll.Code + ": " + ex.Message);
+                    return false;
+                }
+                if (contents == null) return false;
+                foreach (ItemStack? c in contents)
+                {
+                    if (c?.Collectible != null && IsSingleBlocked(player, inst, c.Collectible, traitCodes))
+                    {
+                        blockedColl = c.Collectible;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static bool IsSingleBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject contentColl, HashSet<string> traitCodes)
+        {
+            if (inst.TryGetFoodOverride(player, contentColl, traitCodes, out _)) return false;
+            return !inst.IsInteractAllowed(player, contentColl, traitCodes);
         }
 
         private static bool OnHeldInteractStartPrefix(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)

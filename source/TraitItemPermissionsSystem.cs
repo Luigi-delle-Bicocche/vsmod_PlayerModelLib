@@ -13,13 +13,24 @@ namespace PlayerModelLib
     {
         private readonly Dictionary<string, TraitItemPermissions> _byTrait = new();
         private readonly HashSet<int> _wearRelevantIds = new();
+        private readonly HashSet<int> _itemRelevantIds = new();
         private readonly Dictionary<int, HashSet<string>> _exclusiveItemOwners = new();
         private readonly Dictionary<int, HashSet<string>> _exclusiveWearOwners = new();
+        private CharacterSystem? _characterSystem;
+        private CustomModelsSystem? _customModelsSystem;
 
         public override double ExecuteOrder() => 0.31;
 
+        public override void Start(ICoreAPI api)
+        {
+            _characterSystem = api.ModLoader.GetModSystem<CharacterSystem>();
+            _customModelsSystem = api.ModLoader.GetModSystem<CustomModelsSystem>();
+        }
+
         public override void AssetsFinalize(ICoreAPI api)
         {
+            _characterSystem = api.ModLoader.GetModSystem<CharacterSystem>();
+            _customModelsSystem = api.ModLoader.GetModSystem<CustomModelsSystem>();
             Load(api);
         }
 
@@ -27,8 +38,11 @@ namespace PlayerModelLib
         {
             _byTrait.Clear();
             _wearRelevantIds.Clear();
+            _itemRelevantIds.Clear();
             _exclusiveItemOwners.Clear();
             _exclusiveWearOwners.Clear();
+            _characterSystem = null;
+            _customModelsSystem = null;
         }
 
         public static TraitItemPermissionsSystem? GetInstance(EntityPlayer player)
@@ -60,6 +74,7 @@ namespace PlayerModelLib
         {
             _byTrait.Clear();
             _wearRelevantIds.Clear();
+            _itemRelevantIds.Clear();
             _exclusiveItemOwners.Clear();
             _exclusiveWearOwners.Clear();
             foreach (KeyValuePair<AssetLocation, JToken> entry in api.Assets.GetMany<JToken>(api.Logger, "config/traits"))
@@ -87,6 +102,12 @@ namespace PlayerModelLib
                 _wearRelevantIds.UnionWith(perm.DisallowedWearableIds);
                 _wearRelevantIds.UnionWith(perm.AllowedWearableIds);
                 _wearRelevantIds.UnionWith(perm.ExclusiveWearableIds);
+                _itemRelevantIds.UnionWith(perm.DisallowedIds);
+                _itemRelevantIds.UnionWith(perm.DisallowedInteractIds);
+                _itemRelevantIds.UnionWith(perm.DisallowedAttackIds);
+                _itemRelevantIds.UnionWith(perm.AllowedItemIds);
+                _itemRelevantIds.UnionWith(perm.ExclusiveItemIds);
+                _itemRelevantIds.UnionWith(perm.AllowedFoodOverrides.Keys);
 
                 RegisterExclusiveOwners(_exclusiveWearOwners, perm.ExclusiveWearableIds, kv.Key);
                 RegisterExclusiveOwners(_exclusiveItemOwners, perm.ExclusiveItemIds, kv.Key);
@@ -116,7 +137,7 @@ namespace PlayerModelLib
             string? code = traitObj["code"]?.ToObject<string>();
             if (string.IsNullOrEmpty(code)) return;
 
-            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood")
+            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood") && !Has(traitObj, "AllowedItems")
                 && !Has(traitObj, "ExclusiveItems") && !Has(traitObj, "DisallowedWearables") && !Has(traitObj, "AllowedWearables") && !Has(traitObj, "ExclusiveWearables")) return;
 
             TraitItemPermissionsConfig? cfg;
@@ -140,6 +161,7 @@ namespace PlayerModelLib
             }
 
             if (cfg.DisallowedItems != null) AddIds(api, cfg.DisallowedItems, existing.DisallowedIds);
+            if (cfg.AllowedItems != null) AddIds(api, cfg.AllowedItems, existing.AllowedItemIds);
             if (cfg.DisallowedInteract != null) AddIds(api, cfg.DisallowedInteract, existing.DisallowedInteractIds);
             if (cfg.DisallowedAttack != null) AddIds(api, cfg.DisallowedAttack, existing.DisallowedAttackIds);
             if (cfg.ExclusiveItems != null) AddIds(api, cfg.ExclusiveItems, existing.ExclusiveItemIds);
@@ -205,7 +227,7 @@ namespace PlayerModelLib
                 }
             }
         }
-        // TODO check how CO does things
+
         private static bool IsKnownWearType(string entry)
         {
             return entry.Equals("type:all", StringComparison.OrdinalIgnoreCase) || entry.Equals("type:armor", StringComparison.OrdinalIgnoreCase) || entry.Equals("type:clothing", StringComparison.OrdinalIgnoreCase);
@@ -268,12 +290,10 @@ namespace PlayerModelLib
             }
         }
 
-        public static HashSet<string> GatherPlayerTraitCodes(ICoreAPI api, EntityPlayer player)
+        private static void GatherPlayerTraitCodes(CharacterSystem? charSys, CustomModelsSystem? modelSystem, EntityPlayer player, HashSet<string> result)
         {
-            HashSet<string> result = new HashSet<string>();
+            if (charSys == null) return;
             Settings settings = PlayerModelModSystem.Settings;
-            CharacterSystem charSys = api.ModLoader.GetModSystem<CharacterSystem>();
-            if (charSys == null) return result;
 
             if (!settings.DisableModelClassesAndTraits)
             {
@@ -287,7 +307,6 @@ namespace PlayerModelLib
 
             if (!settings.DisableCustomClassesAndTraits)
             {
-                CustomModelsSystem modelSystem = api.ModLoader.GetModSystem<CustomModelsSystem>();
                 PlayerSkinBehavior? skin = player.GetBehavior<PlayerSkinBehavior>();
                 CustomModelData? model;
                 if (modelSystem != null && skin != null && modelSystem.CustomModels.TryGetValue(skin.CurrentModelCode, out model))
@@ -301,25 +320,39 @@ namespace PlayerModelLib
                     foreach (string t in extra) result.Add(t);
                 }
             }
-            return result;
         }
 
-        private IEnumerable<string> GetPlayerTraitCodes(EntityPlayer player)
+        public HashSet<string> GetPlayerTraitCodes(EntityPlayer player)
         {
-            return GatherPlayerTraitCodes(player.Api, player);
+            HashSet<string> result = new HashSet<string>();
+            GatherPlayerTraitCodes(_characterSystem, _customModelsSystem, player, result);
+            return result;
         }
 
         public bool IsInteractAllowed(EntityPlayer player, CollectibleObject coll)
         {
             if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
-            return IsItemUseAllowed(player, coll, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id));
+            if (!IsItemRelevant(coll.Id)) return true;
+            return IsInteractAllowed(player, coll, GetPlayerTraitCodes(player));
+        }
+
+        public bool IsInteractAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
+        {
+            return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id));
         }
 
         public bool TryGetFoodOverride(EntityPlayer player, CollectibleObject coll, out FoodNutritionProperties props)
         {
             props = null!;
             if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || coll == null) return false;
-            foreach (string trait in GetPlayerTraitCodes(player))
+            if (!IsItemRelevant(coll.Id)) return false;
+            return TryGetFoodOverride(player, coll, GetPlayerTraitCodes(player), out props);
+        }
+
+        public bool TryGetFoodOverride(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes, out FoodNutritionProperties props)
+        {
+            props = null!;
+            foreach (string trait in traitCodes)
             {
                 TraitItemPermissions? perm;
                 FoodNutritionProperties? p;
@@ -335,38 +368,60 @@ namespace PlayerModelLib
         public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll)
         {
             if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
-            return IsItemUseAllowed(player, coll, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id));
+            if (!IsItemRelevant(coll.Id)) return true;
+            return IsAttackAllowed(player, coll, GetPlayerTraitCodes(player));
         }
 
-        private bool IsItemUseAllowed(EntityPlayer player, CollectibleObject coll, System.Func<TraitItemPermissions, bool> isDeniedByTrait)
+        public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
+        {
+            return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id));
+        }
+
+        private bool IsItemUseAllowed(CollectibleObject coll, HashSet<string> traitCodes, System.Func<TraitItemPermissions, bool> isDeniedByTrait)
         {
             HashSet<string>? owners;
-            bool isExclusive = _exclusiveItemOwners.TryGetValue(coll.Id, out owners) && owners.Count > 0;
-            bool hasOwnerTrait = false;
-
-            foreach (string trait in GetPlayerTraitCodes(player))
+            if (_exclusiveItemOwners.TryGetValue(coll.Id, out owners) && owners.Count > 0)
             {
-                TraitItemPermissions? perm;
-                if (_byTrait.TryGetValue(trait, out perm) && isDeniedByTrait(perm))
-                    return false;
-                if (isExclusive && owners!.Contains(trait)) hasOwnerTrait = true;
+                foreach (string trait in traitCodes)
+                {
+                    if (owners.Contains(trait)) return true;
+                }
+                return false;
             }
 
-            if (isExclusive && !hasOwnerTrait) return false;
+            bool denied = false;
+            foreach (string trait in traitCodes)
+            {
+                TraitItemPermissions? perm;
+                if (!_byTrait.TryGetValue(trait, out perm)) continue;
+                if (perm.AllowedItemIds.Contains(coll.Id)) return true;
+                if (isDeniedByTrait(perm)) denied = true;
+            }
 
-            return true;
+            return !denied;
         }
 
         public bool IsWearAllowed(EntityPlayer player, CollectibleObject coll)
         {
             if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
+            if (!IsWearRelevant(coll.Id)) return true;
+            return IsWearAllowed(player, coll, GetPlayerTraitCodes(player));
+        }
 
+        public bool IsWearAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
+        {
             HashSet<string>? owners;
-            bool isExclusive = _exclusiveWearOwners.TryGetValue(coll.Id, out owners) && owners.Count > 0;
-            bool hasOwnerTrait = false;
-            bool denied = false;
+            if (_exclusiveWearOwners.TryGetValue(coll.Id, out owners) && owners.Count > 0)
+            {
+                foreach (string trait in traitCodes)
+                {
+                    if (owners.Contains(trait)) return true;
+                }
+                return false;
+            }
 
-            foreach (string trait in GetPlayerTraitCodes(player))
+            bool denied = false;
+            foreach (string trait in traitCodes)
             {
                 TraitItemPermissions? perm;
                 if (_byTrait.TryGetValue(trait, out perm))
@@ -374,10 +429,7 @@ namespace PlayerModelLib
                     if (perm.AllowedWearableIds.Contains(coll.Id)) return true;
                     if (perm.DisallowedWearableIds.Contains(coll.Id)) denied = true;
                 }
-                if (isExclusive && owners!.Contains(trait)) hasOwnerTrait = true;
             }
-
-            if (isExclusive && !hasOwnerTrait) return false;
 
             return !denied;
         }
@@ -385,6 +437,11 @@ namespace PlayerModelLib
         public bool IsWearRelevant(int collectibleId)
         {
             return _wearRelevantIds.Contains(collectibleId);
+        }
+
+        public bool IsItemRelevant(int collectibleId)
+        {
+            return _itemRelevantIds.Contains(collectibleId);
         }
 
     }
@@ -398,6 +455,7 @@ namespace PlayerModelLib
 
     public class TraitItemPermissionsConfig
     {
+        public string[] AllowedItems { get; set; } = new string[0];
         public string[] DisallowedItems { get; set; } = new string[0];
         public string[] DisallowedInteract { get; set; } = new string[0];
         public string[] DisallowedAttack { get; set; } = new string[0];
@@ -410,6 +468,7 @@ namespace PlayerModelLib
 
     public class TraitItemPermissions
     {
+        public HashSet<int> AllowedItemIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedInteractIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedAttackIds { get; set; } = new HashSet<int>();

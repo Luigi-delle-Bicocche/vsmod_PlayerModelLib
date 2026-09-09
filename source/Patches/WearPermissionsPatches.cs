@@ -70,7 +70,7 @@ namespace PlayerModelLib
             _harmony = null;
         }
 
-        private static EntityPlayer? ResolveCharacterSlotOwner(ItemSlotCharacter? slot)
+        internal static EntityPlayer? ResolveCharacterSlotOwner(ItemSlot? slot)
         {
             InventoryBase? inv = slot?.Inventory;
             ICoreAPI api = inv.Api;
@@ -107,7 +107,7 @@ namespace PlayerModelLib
             return false;
         }
 
-        private static bool TryBlockWear(ICoreAPI api, CollectibleObject? coll, Func<EntityPlayer?> resolveOwner)
+        internal static bool TryBlockWear(ICoreAPI api, CollectibleObject? coll, Func<EntityPlayer?> resolveOwner, bool feedback)
         {
             if (coll == null) return true;
             TraitItemPermissionsSystem? inst = api.ModLoader.GetModSystem<TraitItemPermissionsSystem>();
@@ -115,7 +115,7 @@ namespace PlayerModelLib
             if (!inst.IsWearRelevant(coll.Id)) return true;
             EntityPlayer? player = resolveOwner();
             if (player == null || inst.IsWearAllowed(player, coll)) return true;
-            TraitItemPermissionsSystem.SendWearDisallowed(player);
+            if (feedback) TraitItemPermissionsSystem.SendWearDisallowed(player);
             return false;
         }
 
@@ -123,7 +123,7 @@ namespace PlayerModelLib
         {
             CollectibleObject? coll = itemstackFromSourceSlot?.Itemstack?.Collectible;
             ICoreAPI api = __instance.Inventory.Api;
-            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance))) { __result = false; return false; }
+            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
             return true;
         }
 
@@ -131,7 +131,7 @@ namespace PlayerModelLib
         {
             CollectibleObject? coll = sourceSlot?.Itemstack?.Collectible;
             ICoreAPI api = __instance.Inventory.Api;
-            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance))) { __result = false; return false; }
+            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
             return true;
         }
 
@@ -141,11 +141,11 @@ namespace PlayerModelLib
             EntityPlayer? player = byEntity as EntityPlayer;
             if (player == null) return true;
             if (IsNonSelfDressInteract(byEntity, blockSel, entitySel)) return true;
-            if (!TryBlockWear(player.Api, coll, () => player)) { handHandling = EnumHandHandling.PreventDefault; handling = EnumHandling.PreventSubsequent; return false; }
+            if (!TryBlockWear(player.Api, coll, () => player, true)) { handHandling = EnumHandHandling.PreventDefault; handling = EnumHandling.PreventSubsequent; return false; }
             return true;
         }
         
-        private static bool IsNonSelfDressInteract(EntityAgent byEntity, BlockSelection? blockSel, EntitySelection? entitySel)
+        internal static bool IsNonSelfDressInteract(EntityAgent byEntity, BlockSelection? blockSel, EntitySelection? entitySel)
         {
             if (byEntity.Controls?.ShiftKey == true) return true;
             if (entitySel?.Entity?.GetBehavior<EntityBehaviorAttachable>() != null) return true;
