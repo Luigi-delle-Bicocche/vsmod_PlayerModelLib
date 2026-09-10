@@ -302,12 +302,12 @@ JSON API documentation:
 
 Traits can restrict which items a character can use to attack or interact with or wear and can be used to override food items values and edibility.
 For food overrides, you can specify Satiety, Health and the food category. These values are optional and will use the item's base value if omitted, provided it has any.
-Items that are explicitly allowed as food will not be blocked if listed in DisallowedInteract.
+Items that are explicitly allowed as food will not be blocked if listed in DisallowedInteract. If a liquid (example: milk) is specified as disallowed, any containers with milk inside them will not let you drink it.
 
 **Items or wearables that are explicitly allowed will always be allowed even if disallowed, even by other traits.**
+The order is Exclusive>Allowed>Disallowed.
 You can use this in combination with wildcards to disallow a lot of items at once but only allow one or two.
-Items marked as exclusive will only be able to be used by classes that have those traits and disallowed for everyone else.
-Marking exclusive items as allowed for classes that do not have the exclusive trait does not allow them to use the item.
+Items marked as exclusive will only be able to be used by classes that have those traits and disallowed for everyone else even if in AllowedItems.
 The wearable restriction system supports usage of: "type:all" "type:armor" "type:clothing" to easily restrict one or both categories of wearables.
 ```
 {
@@ -315,7 +315,8 @@ The wearable restriction system supports usage of: "type:all" "type:armor" "type
   "AllowedItems": ["game:spear-generic-iron"], // Allows usage of the iron spear even if it's later disallowed
   "DisallowedItems": ["game:spear-*"], // Blocks both attacking and throwing of all spears. Disallows both attack and interaction.
   "DisallowedAttack": [ "game:blade-falx-copper-*" ], // Blocks attacking only
-  "DisallowedInteract": [ "game:bow-*", "game:bread-*" ], // Blocks use interaction only (includes eating). This makes the bow unusable and the bread inedible
+  "DisallowedInteract": [ "game:bow-*", "game:bread-*" ], // Blocks use interaction only (includes eating the item). This makes the bow unusable and the bread inedible
+  "DisallowedAsIngredient": [ "game:fruit-cloudberry" ], // Blocks eating the item and eating any meal or pie that contain the item
   "ExclusiveItems": ["game:spear-generic-ornategold"], // Only classes that have this trait can use this item
   "AllowedWearables": ["game:armor-*-tailored-*"], // Allows wearing all variants and parts of the linen armor, even if later disallowed by wildcards
   "DisallowedWearables": ["type:armor", "game:clothes-nadiya-*"], // Blocks wearing all armors and the nadiya clothing. Available types: type:all, type:armor, type:clothing

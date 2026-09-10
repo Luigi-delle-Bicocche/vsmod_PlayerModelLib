@@ -114,7 +114,7 @@ namespace PlayerModelLib
             if (inst == null) return true;
             if (!inst.IsWearRelevant(coll.Id)) return true;
             EntityPlayer? player = resolveOwner();
-            if (player == null || inst.IsWearAllowed(player, coll)) return true;
+            if (player == null || inst.IsWearAllowed(player, coll, inst.GetPlayerTraitCodes(player))) return true;
             if (feedback) TraitItemPermissionsSystem.SendWearDisallowed(player);
             return false;
         }

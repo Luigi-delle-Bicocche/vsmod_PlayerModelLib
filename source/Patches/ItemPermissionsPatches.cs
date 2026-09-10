@@ -32,6 +32,14 @@ namespace PlayerModelLib
                 }
                 harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(OnHeldInteractStartPrefix))));
 
+                m = t.GetMethod(nameof(CollectibleObject.OnHeldUseStart), AccessTools.all);
+                if (m == null)
+                {
+                    Log.Warn(api, typeof(ItemPermissionsPatches), "Could not find CollectibleObject.OnHeldUseStart");
+                    return;
+                }
+                harmony.Patch(m, prefix: new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), nameof(OnHeldUseStartPrefix))));
+
                 m = t.GetMethod(nameof(CollectibleObject.OnHeldUseStep), AccessTools.all);
                 if (m == null)
                 {
@@ -113,6 +121,130 @@ namespace PlayerModelLib
             _harmony = null;
         }
 
+        private static readonly HashSet<MethodInfo> _patchedOverrideMethods = new();
+        [ThreadStatic]
+        private static bool _inGetHeldItemInfo;
+        private static readonly (string methodName, Type[] paramTypes, string patchName, bool isPostfix)[] _overridePatchMap = new (string, Type[], string, bool)[]
+        {
+            (nameof(CollectibleObject.OnHeldUseStart), new Type[] { typeof(ItemSlot), typeof(EntityAgent), typeof(BlockSelection), typeof(EntitySelection), typeof(EnumHandInteract), typeof(bool), typeof(EnumHandHandling).MakeByRefType() }, nameof(OnHeldUseStartAnyPrefix), false),
+            (nameof(CollectibleObject.OnHeldInteractStart), new Type[] { typeof(ItemSlot), typeof(EntityAgent), typeof(BlockSelection), typeof(EntitySelection), typeof(bool), typeof(EnumHandHandling).MakeByRefType() }, nameof(OnHeldInteractStartAnyPrefix), false),
+            (nameof(CollectibleObject.OnHeldInteractStep), new Type[] { typeof(float), typeof(ItemSlot), typeof(EntityAgent), typeof(BlockSelection), typeof(EntitySelection) }, nameof(OnHeldInteractStepAnyPrefix), false),
+            (nameof(CollectibleObject.OnHeldAttackStart), new Type[] { typeof(ItemSlot), typeof(EntityAgent), typeof(BlockSelection), typeof(EntitySelection), typeof(EnumHandHandling).MakeByRefType() }, nameof(OnHeldAttackStartAnyPrefix), false),
+            (nameof(CollectibleObject.GetHeldTpHitAnimation), new Type[] { typeof(ItemSlot), typeof(Entity) }, nameof(GetHeldTpHitAnimationAnyPrefix), false),
+            (nameof(CollectibleObject.GetHeldTpUseAnimation), new Type[] { typeof(ItemSlot), typeof(Entity) }, nameof(GetHeldTpUseAnimationAnyPrefix), false),
+            (nameof(CollectibleObject.GetHeldItemInfo), new Type[] { typeof(ItemSlot), typeof(StringBuilder), typeof(IWorldAccessor), typeof(bool) }, nameof(GetHeldItemInfoPostfix), true),
+        };
+
+        public static void PatchCollectibleOverrides(ICoreAPI api)
+        {
+            Harmony? harmony = _harmony;
+            if (harmony == null)
+            {
+                Log.Warn(api, typeof(ItemPermissionsPatches), "Cannot patch collectible overrides before base patches are applied");
+                return;
+            }
+            int patched = 0;
+            int types = 0;
+            try
+            {
+                HashSet<Type> seen = new HashSet<Type>();
+                foreach (CollectibleObject coll in api.World.Collectibles)
+                {
+                    Type t = coll.GetType();
+                    if (!seen.Add(t) || !t.IsSubclassOf(typeof(CollectibleObject))) continue;
+                    bool typePatched = false;
+                    foreach ((string methodName, Type[] paramTypes, string patchName, bool isPostfix) in _overridePatchMap)
+                    {
+                        MethodInfo? m;
+                        try { m = t.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly, null, paramTypes, null); }
+                        catch (Exception ex)
+                        {
+                            Log.Warn(api, typeof(ItemPermissionsPatches), "Override lookup failed for " + t.FullName + "." + methodName + ": " + ex.Message);
+                            continue;
+                        }
+                        if (m == null || m.IsAbstract || !_patchedOverrideMethods.Add(m)) continue;
+                        try
+                        {
+                            HarmonyMethod patch = new HarmonyMethod(AccessTools.Method(typeof(ItemPermissionsPatches), patchName));
+                            if (isPostfix) harmony.Patch(m, postfix: patch);
+                            else harmony.Patch(m, prefix: patch);
+                            patched++;
+                            typePatched = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warn(api, typeof(ItemPermissionsPatches), "Failed to patch override " + t.FullName + "." + methodName + ": " + ex.Message);
+                        }
+                    }
+                    if (typePatched) types++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(api, typeof(ItemPermissionsPatches), "Failed to patch collectible overrides: " + ex.Message);
+                return;
+            }
+            Log.Debug(api, typeof(ItemPermissionsPatches), "Patched " + patched + " collectible override methods on " + types + " types");
+        }
+        
+        private static bool OnHeldUseStartAnyPrefix(object[] __args)
+        {
+            ItemSlot slot = (ItemSlot)__args[0];
+            EntityAgent byEntity = (EntityAgent)__args[1];
+            BlockSelection blockSel = (BlockSelection)__args[2];
+            EntitySelection entitySel = (EntitySelection)__args[3];
+            EnumHandInteract useType = (EnumHandInteract)__args[4];
+            bool firstEvent = (bool)__args[5];
+            EnumHandHandling handling = (EnumHandHandling)__args[6];
+            bool result = OnHeldUseStartPrefix(slot, byEntity, blockSel, entitySel, useType, firstEvent, ref handling);
+            __args[6] = handling;
+            return result;
+        }
+
+        private static bool OnHeldInteractStartAnyPrefix(object[] __args)
+        {
+            ItemSlot slot = (ItemSlot)__args[0];
+            EntityAgent byEntity = (EntityAgent)__args[1];
+            BlockSelection blockSel = (BlockSelection)__args[2];
+            EntitySelection entitySel = (EntitySelection)__args[3];
+            bool firstEvent = (bool)__args[4];
+            EnumHandHandling handling = (EnumHandHandling)__args[5];
+            bool result = OnHeldInteractStartPrefix(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
+            __args[5] = handling;
+            return result;
+        }
+
+        private static bool OnHeldInteractStepAnyPrefix(object[] __args, ref bool __result)
+        {
+            ItemSlot slot = (ItemSlot)__args[1];
+            EntityAgent byEntity = (EntityAgent)__args[2];
+            return OnHeldInteractStepPrefix(slot, byEntity, ref __result);
+        }
+
+        private static bool OnHeldAttackStartAnyPrefix(object[] __args)
+        {
+            ItemSlot slot = (ItemSlot)__args[0];
+            EntityAgent byEntity = (EntityAgent)__args[1];
+            EnumHandHandling handling = (EnumHandHandling)__args[4];
+            bool result = OnHeldAttackStartPrefix(slot, byEntity, ref handling);
+            __args[4] = handling;
+            return result;
+        }
+
+        private static bool GetHeldTpHitAnimationAnyPrefix(object[] __args, ref string __result)
+        {
+            ItemSlot slot = (ItemSlot)__args[0];
+            Entity forEntity = (Entity)__args[1];
+            return GetHeldTpHitAnimationPrefix(slot, forEntity, ref __result);
+        }
+
+        private static bool GetHeldTpUseAnimationAnyPrefix(object[] __args, ref string __result)
+        {
+            ItemSlot slot = (ItemSlot)__args[0];
+            Entity forEntity = (Entity)__args[1];
+            return GetHeldTpUseAnimationPrefix(slot, forEntity, ref __result);
+        }
+
         private static bool TryBlockInteract(EntityPlayer player, CollectibleObject coll, ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection? entitySel, bool firstEvent, ref EnumHandHandling handling)
         {
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
@@ -145,16 +277,26 @@ namespace PlayerModelLib
             return false;
         }
 
-        private static bool ShouldBlockUse(EntityPlayer player, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, EnumHandInteract useType)
+        private static bool ShouldBlockUse(EntityPlayer player, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, EnumHandInteract useType, out CollectibleObject? blockedColl)
         {
+            blockedColl = null;
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return false;
-            if (useType == EnumHandInteract.HeldItemAttack) return !inst.IsAttackAllowed(player, coll);
+            if (useType == EnumHandInteract.HeldItemAttack)
+            {
+                bool attackBlocked = !inst.IsAttackAllowed(player, coll);
+                if (attackBlocked) blockedColl = coll;
+                return attackBlocked;
+            }
             if (!inst.IsItemRelevant(coll.Id) && !HasRelevantContent(inst, coll, stack, world, player)) return false;
             HashSet<string> traitCodes = inst.GetPlayerTraitCodes(player);
             if (inst.TryGetFoodOverride(player, coll, traitCodes, out _)) return false;
-            if (!inst.IsInteractAllowed(player, coll, traitCodes)) return true;
-            return IsContentBlocked(player, inst, coll, stack, world, traitCodes, out _);
+            if (!inst.IsInteractAllowed(player, coll, traitCodes))
+            {
+                blockedColl = coll;
+                return true;
+            }
+            return IsContentBlocked(player, inst, coll, stack, world, traitCodes, out blockedColl);
         }
 
         private static bool HasRelevantContent(TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, EntityPlayer player)
@@ -189,54 +331,6 @@ namespace PlayerModelLib
             return false;
         }
 
-        private static bool IsContentBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, out CollectibleObject? blockedColl)
-        {
-            blockedColl = null;
-            if (stack == null) return false;
-            if (coll is BlockLiquidContainerBase liquid)
-            {
-                ItemStack? content;
-                try { content = liquid.GetContent(stack); }
-                catch (Exception ex)
-                {
-                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContent failed " + coll.Code + ": " + ex.Message);
-                    return false;
-                }
-                if (content?.Collectible != null && IsSingleBlocked(player, inst, content.Collectible))
-                {
-                    blockedColl = content.Collectible;
-                    return true;
-                }
-                return false;
-            }
-            if (coll is IBlockMealContainer meal)
-            {
-                ItemStack[] contents;
-                try { contents = meal.GetContents(world, stack); }
-                catch (Exception ex)
-                {
-                    Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContents failed " + coll.Code + ": " + ex.Message);
-                    return false;
-                }
-                if (contents == null) return false;
-                foreach (ItemStack? c in contents)
-                {
-                    if (c?.Collectible != null && IsSingleBlocked(player, inst, c.Collectible))
-                    {
-                        blockedColl = c.Collectible;
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        private static bool IsSingleBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject contentColl)
-        {
-            if (inst.TryGetFoodOverride(player, contentColl, out _)) return false;
-            return !inst.IsInteractAllowed(player, contentColl);
-        }
-
         private static bool IsContentBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject coll, ItemStack? stack, IWorldAccessor world, HashSet<string> traitCodes, out CollectibleObject? blockedColl)
         {
             blockedColl = null;
@@ -250,7 +344,7 @@ namespace PlayerModelLib
                     Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContent failed " + coll.Code + ": " + ex.Message);
                     return false;
                 }
-                if (content?.Collectible != null && IsSingleBlocked(player, inst, content.Collectible, traitCodes))
+                if (content?.Collectible != null && IsSingleBlockedDirect(player, inst, content.Collectible, traitCodes))
                 {
                     blockedColl = content.Collectible;
                     return true;
@@ -269,7 +363,7 @@ namespace PlayerModelLib
                 if (contents == null) return false;
                 foreach (ItemStack? c in contents)
                 {
-                    if (c?.Collectible != null && IsSingleBlocked(player, inst, c.Collectible, traitCodes))
+                    if (c?.Collectible != null && IsSingleBlockedIngredient(player, inst, c.Collectible, traitCodes))
                     {
                         blockedColl = c.Collectible;
                         return true;
@@ -279,17 +373,23 @@ namespace PlayerModelLib
             return false;
         }
 
-        private static bool IsSingleBlocked(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject contentColl, HashSet<string> traitCodes)
+        private static bool IsSingleBlockedDirect(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject contentColl, HashSet<string> traitCodes)
         {
             if (inst.TryGetFoodOverride(player, contentColl, traitCodes, out _)) return false;
             return !inst.IsInteractAllowed(player, contentColl, traitCodes);
+        }
+
+        private static bool IsSingleBlockedIngredient(EntityPlayer player, TraitItemPermissionsSystem inst, CollectibleObject contentColl, HashSet<string> traitCodes)
+        {
+            if (inst.TryGetFoodOverride(player, contentColl, traitCodes, out _)) return false;
+            return !inst.IsIngredientAllowed(player, contentColl, traitCodes);
         }
 
         private static bool OnHeldInteractStartPrefix(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
         {
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
-            if (slot == null || coll == null || player == null) return true;
+            if (coll == null || player == null) return true;
             return TryBlockInteract(player, coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
         }
 
@@ -298,7 +398,7 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, player.Controls.HandUse)) { __result = EnumHandInteract.None; return false; }
+            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, player.Controls.HandUse, out _)) { __result = EnumHandInteract.None; return false; }
             return true;
         }
 
@@ -307,7 +407,12 @@ namespace PlayerModelLib
             CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
             EntityPlayer? player = byEntity as EntityPlayer;
             if (coll == null || player == null) return true;
-            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, useType)) { TraitItemPermissionsSystem.SendItemDisallowed(player, coll); return false; }
+            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, useType, out CollectibleObject? blockedColl))
+            {
+                bool silentMealContent = blockedColl != null && !ReferenceEquals(blockedColl, coll) && coll is IBlockMealContainer;
+                if (!silentMealContent) TraitItemPermissionsSystem.SendItemDisallowed(player, blockedColl ?? coll);
+                return false;
+            }
             return true;
         }
 
@@ -360,9 +465,35 @@ namespace PlayerModelLib
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return true;
             if (inst.TryGetFoodOverride(player, coll, out _)) return true;
-            if (inst.IsInteractAllowed(player, coll)) return true;
-            __result = BlockedAnimation;
-            return false;
+            if (!inst.IsInteractAllowed(player, coll))
+            {
+                __result = BlockedAnimation;
+                return false;
+            }
+            if (IsContentBlocked(player, inst, coll, activeHotbarSlot?.Itemstack, player.Api.World, inst.GetPlayerTraitCodes(player), out _))
+            {
+                __result = BlockedAnimation;
+                return false;
+            }
+            return true;
+        }
+
+        private static bool OnHeldUseStartPrefix(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel, EntitySelection? entitySel, EnumHandInteract useType, bool firstEvent, ref EnumHandHandling handling)
+        {
+            CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
+            EntityPlayer? player = byEntity as EntityPlayer;
+            if (coll == null || player == null) return true;
+            if (useType == EnumHandInteract.HeldItemAttack) return TryBlockAttack(player, coll, ref handling);
+            return TryBlockInteract(player, coll, slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
+        }
+
+        private static bool OnHeldInteractStepPrefix(ItemSlot slot, EntityAgent byEntity, ref bool __result)
+        {
+            CollectibleObject? coll = slot != null && slot.Itemstack != null ? slot.Itemstack.Collectible : null;
+            EntityPlayer? player = byEntity as EntityPlayer;
+            if (coll == null || player == null) return true;
+            if (ShouldBlockUse(player, coll, slot?.Itemstack, byEntity.World, player.Controls.HandUse, out _)) { __result = false; return false; }
+            return true;
         }
 
         private static void GetNutritionPropertiesPerLitrePostfix(BlockLiquidContainerBase __instance, ItemStack itemstack, Entity forEntity, ref FoodNutritionProperties __result)
@@ -399,21 +530,41 @@ namespace PlayerModelLib
         private static void GetHeldItemInfoPostfix(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world)
         {
             if (!(world is IClientWorldAccessor cworld)) return;
+            if (inSlot == null) return;
+            CollectibleObject? coll = inSlot.Itemstack?.Collectible;
             EntityPlayer? player = cworld.Player?.Entity;
-            CollectibleObject? coll = inSlot?.Itemstack?.Collectible;
-            if (inSlot == null || player == null || coll == null) return;
+            if (player == null || coll == null) return;
             TraitItemPermissionsSystem? inst = TraitItemPermissionsSystem.GetInstance(player);
             if (inst == null) return;
+            if (_inGetHeldItemInfo) return;
+            _inGetHeldItemInfo = true;
+            try
+            {
+                GetHeldItemInfoBody(inSlot, dsc, world, player, coll, inst);
+            }
+            finally
+            {
+                _inGetHeldItemInfo = false;
+            }
+        }
+
+        private static void GetHeldItemInfoBody(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, EntityPlayer player, CollectibleObject coll, TraitItemPermissionsSystem inst)
+        {
+            string text = dsc.ToString();
+            string foodText = Lang.Get("playermodellib:tooltiptext-foodnotallowed");
+            string itemText = Lang.Get("playermodellib:tooltiptext-itemnotallowed");
+            if (text.IndexOf(foodText, StringComparison.Ordinal) >= 0 || text.IndexOf(itemText, StringComparison.Ordinal) >= 0) return;
             if (inst.TryGetFoodOverride(player, coll, out FoodNutritionProperties? edited))
             {
                 ReplaceNutritionTooltipLine(inSlot, dsc, world, player, coll, edited, coll.NutritionProps);
                 return;
             }
-            if (coll is BlockLiquidContainerBase container && inSlot.Itemstack != null)
+            ItemStack? stack = inSlot.Itemstack;
+            if (coll is BlockLiquidContainerBase container && stack != null)
             {
                 bool handled = false;
                 ItemStack? content = null;
-                try { content = container.GetContent(inSlot.Itemstack); }
+                try { content = container.GetContent(stack); }
                 catch (Exception ex)
                 {
                     Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetContent failed " + coll.Code + ex.Message);
@@ -421,7 +572,7 @@ namespace PlayerModelLib
                 if (content?.Collectible != null && inst.TryGetFoodOverride(player, content.Collectible, out FoodNutritionProperties? contentEdited) && contentEdited != null)
                 {
                     float litres = 0f;
-                    try { litres = container.GetCurrentLitres(inSlot.Itemstack); }
+                    try { litres = container.GetCurrentLitres(stack); }
                     catch (Exception ex)
                     {
                         Log.Warn(player.Api, typeof(ItemPermissionsPatches), "GetCurrentLitres failed " + coll.Code + ex.Message);
@@ -448,15 +599,13 @@ namespace PlayerModelLib
                 }
                 if (handled) return;
             }
-            if (IsContentBlocked(player, inst, coll, inSlot.Itemstack, world, out CollectibleObject? blockedColl))
-            {
-                string contentKey = blockedColl?.NutritionProps != null ? "playermodellib:tooltiptext-foodnotallowed" : "playermodellib:tooltiptext-itemnotallowed";
-                dsc.AppendLine("<font color=\"#ff8484\">" + Lang.Get(contentKey) + "</font>");
-                return;
-            }
-            if (inst.IsInteractAllowed(player, coll)) return;
-            string key = coll.NutritionProps != null ? "playermodellib:tooltiptext-foodnotallowed" : "playermodellib:tooltiptext-itemnotallowed";
-            dsc.AppendLine("<font color=\"#ff8484\">" + Lang.Get(key) + "</font>");
+            string? notAllowedKey = null;
+            if (IsContentBlocked(player, inst, coll, stack, world, inst.GetPlayerTraitCodes(player), out CollectibleObject? blockedColl))
+                notAllowedKey = blockedColl != null && (TraitItemPermissionsSystem.HasNutrition(player.Api, blockedColl) || coll is IBlockMealContainer) ? "playermodellib:tooltiptext-foodnotallowed" : "playermodellib:tooltiptext-itemnotallowed";
+            else if (!inst.IsAttackAllowed(player, coll) || !inst.IsInteractAllowed(player, coll))
+                notAllowedKey = TraitItemPermissionsSystem.HasNutrition(player.Api, coll) || coll is IBlockMealContainer ? "playermodellib:tooltiptext-foodnotallowed" : "playermodellib:tooltiptext-itemnotallowed";
+            if (notAllowedKey == null) return;
+            dsc.AppendLine("<font color=\"#ff8484\">" + Lang.Get(notAllowedKey) + "</font>");
         }
 
         private static void ReplaceNutritionTooltipLine(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, EntityPlayer player, CollectibleObject coll, FoodNutritionProperties edited, FoodNutritionProperties? orig, float? spoilStateOverride = null, ItemStack? spoilStack = null)

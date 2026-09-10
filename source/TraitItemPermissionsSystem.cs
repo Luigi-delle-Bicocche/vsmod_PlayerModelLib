@@ -53,7 +53,7 @@ namespace PlayerModelLib
 
         public static void SendItemDisallowed(EntityPlayer player, CollectibleObject coll)
         {
-            if (coll.NutritionProps != null) return; // dont send the error msg on purpose like vanilla inedible items do. if users are confused (can't read tooltip) then this could be reinstated
+            if (HasNutrition(player.Api, coll) || coll is IBlockMealContainer) return; // dont send the error msg on purpose like vanilla inedible items do. if users are confused (can't read tooltip) then this could be reinstated
             SendDisallowed(player, "playermodellib:itemdisallowed", "itemdisallowed");
         }
 
@@ -62,12 +62,48 @@ namespace PlayerModelLib
             SendDisallowed(player, "playermodellib:weardisallowed", "weardisallowed");
         }
 
+        private static readonly Dictionary<string, long> _lastDisallowedMsgMs = new Dictionary<string, long>();
+        private static readonly object _disallowedLock = new object();
+
         private static void SendDisallowed(EntityPlayer player, string langKey, string errorCode)
         {
+            long now = player.Api.World.ElapsedMilliseconds;
+            string key = player.PlayerUID + ":" + errorCode;
+            lock (_disallowedLock)
+            {
+                if (_lastDisallowedMsgMs.TryGetValue(key, out long last) && now - last < 1500) return;
+                _lastDisallowedMsgMs[key] = now;
+                if (_lastDisallowedMsgMs.Count > 256) EvictStaleErrorMsgs(now);
+            }
             string message = Lang.Get(langKey);
             if (player.Player is IServerPlayer sp) sp.SendIngameError(errorCode, message);
             else if (player.Api is ICoreClientAPI capi && player.PlayerUID == capi.World.Player?.PlayerUID)
                 capi.TriggerIngameError(null, errorCode, message);
+        }
+
+        private static void EvictStaleErrorMsgs(long now)
+        {
+            const long expiryMs = 10000;
+            List<string>? stale = null;
+            foreach (KeyValuePair<string, long> kv in _lastDisallowedMsgMs)
+            {
+                if (now - kv.Value > expiryMs) (stale ??= new List<string>()).Add(kv.Key);
+            }
+            if (stale != null)
+            {
+                foreach (string k in stale) _lastDisallowedMsgMs.Remove(k);
+            }
+            while (_lastDisallowedMsgMs.Count > 256)
+            {
+                string? oldestKey = null;
+                long oldestValue = long.MaxValue;
+                foreach (KeyValuePair<string, long> kv in _lastDisallowedMsgMs)
+                {
+                    if (kv.Value < oldestValue) { oldestValue = kv.Value; oldestKey = kv.Key; }
+                }
+                if (oldestKey == null) break;
+                _lastDisallowedMsgMs.Remove(oldestKey);
+            }
         }
 
         private void Load(ICoreAPI api)
@@ -104,6 +140,7 @@ namespace PlayerModelLib
                 _wearRelevantIds.UnionWith(perm.ExclusiveWearableIds);
                 _itemRelevantIds.UnionWith(perm.DisallowedIds);
                 _itemRelevantIds.UnionWith(perm.DisallowedInteractIds);
+                _itemRelevantIds.UnionWith(perm.DisallowedAsIngredientIds);
                 _itemRelevantIds.UnionWith(perm.DisallowedAttackIds);
                 _itemRelevantIds.UnionWith(perm.AllowedItemIds);
                 _itemRelevantIds.UnionWith(perm.ExclusiveItemIds);
@@ -112,6 +149,7 @@ namespace PlayerModelLib
                 RegisterExclusiveOwners(_exclusiveWearOwners, perm.ExclusiveWearableIds, kv.Key);
                 RegisterExclusiveOwners(_exclusiveItemOwners, perm.ExclusiveItemIds, kv.Key);
             }
+            ItemPermissionsPatches.PatchCollectibleOverrides(api);
         }
 
         private static void RegisterExclusiveOwners(Dictionary<int, HashSet<string>> ownersById, HashSet<int> exclusiveIds, string traitCode)
@@ -137,7 +175,7 @@ namespace PlayerModelLib
             string? code = traitObj["code"]?.ToObject<string>();
             if (string.IsNullOrEmpty(code)) return;
 
-            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "AllowedFood") && !Has(traitObj, "AllowedItems")
+            if (!Has(traitObj, "DisallowedItems") && !Has(traitObj, "DisallowedAttack") && !Has(traitObj, "DisallowedInteract") && !Has(traitObj, "DisallowedAsIngredient") && !Has(traitObj, "AllowedFood") && !Has(traitObj, "AllowedItems")
                 && !Has(traitObj, "ExclusiveItems") && !Has(traitObj, "DisallowedWearables") && !Has(traitObj, "AllowedWearables") && !Has(traitObj, "ExclusiveWearables")) return;
 
             TraitItemPermissionsConfig? cfg;
@@ -163,6 +201,7 @@ namespace PlayerModelLib
             if (cfg.DisallowedItems != null) AddIds(api, cfg.DisallowedItems, existing.DisallowedIds);
             if (cfg.AllowedItems != null) AddIds(api, cfg.AllowedItems, existing.AllowedItemIds);
             if (cfg.DisallowedInteract != null) AddIds(api, cfg.DisallowedInteract, existing.DisallowedInteractIds);
+            if (cfg.DisallowedAsIngredient != null) AddIds(api, cfg.DisallowedAsIngredient, existing.DisallowedAsIngredientIds);
             if (cfg.DisallowedAttack != null) AddIds(api, cfg.DisallowedAttack, existing.DisallowedAttackIds);
             if (cfg.ExclusiveItems != null) AddIds(api, cfg.ExclusiveItems, existing.ExclusiveItemIds);
             if (cfg.DisallowedWearables != null) AddWearIds(api, cfg.DisallowedWearables, existing.DisallowedWearableIds, traitCode, source);
@@ -199,6 +238,11 @@ namespace PlayerModelLib
                     existing.AllowedFoodOverrides[coll.Id] = baseProps;
                 }
             }
+        }
+
+        public static bool HasNutrition(ICoreAPI api, CollectibleObject coll)
+        {
+            return GetBaseNutritionProps(api, coll) != null;
         }
 
         public static FoodNutritionProperties? GetBaseNutritionProps(ICoreAPI api, CollectibleObject coll)
@@ -338,7 +382,7 @@ namespace PlayerModelLib
 
         public bool IsInteractAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
         {
-            return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id));
+            return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedInteractIds.Contains(coll.Id) || perm.DisallowedAsIngredientIds.Contains(coll.Id));
         }
 
         public bool TryGetFoodOverride(EntityPlayer player, CollectibleObject coll, out FoodNutritionProperties props)
@@ -375,6 +419,11 @@ namespace PlayerModelLib
         public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
         {
             return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAttackIds.Contains(coll.Id));
+        }
+        
+        public bool IsIngredientAllowed(EntityPlayer player, CollectibleObject coll, HashSet<string> traitCodes)
+        {
+            return IsItemUseAllowed(coll, traitCodes, perm => perm.DisallowedIds.Contains(coll.Id) || perm.DisallowedAsIngredientIds.Contains(coll.Id));
         }
 
         private bool IsItemUseAllowed(CollectibleObject coll, HashSet<string> traitCodes, System.Func<TraitItemPermissions, bool> isDeniedByTrait)
@@ -458,6 +507,7 @@ namespace PlayerModelLib
         public string[] AllowedItems { get; set; } = new string[0];
         public string[] DisallowedItems { get; set; } = new string[0];
         public string[] DisallowedInteract { get; set; } = new string[0];
+        public string[] DisallowedAsIngredient { get; set; } = new string[0];
         public string[] DisallowedAttack { get; set; } = new string[0];
         public string[] ExclusiveItems { get; set; } = new string[0];
         public string[] DisallowedWearables { get; set; } = new string[0];
@@ -471,6 +521,7 @@ namespace PlayerModelLib
         public HashSet<int> AllowedItemIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedInteractIds { get; set; } = new HashSet<int>();
+        public HashSet<int> DisallowedAsIngredientIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedAttackIds { get; set; } = new HashSet<int>();
         public HashSet<int> ExclusiveItemIds { get; set; } = new HashSet<int>();
         public HashSet<int> DisallowedWearableIds { get; set; } = new HashSet<int>();
