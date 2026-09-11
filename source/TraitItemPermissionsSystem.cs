@@ -71,7 +71,7 @@ namespace PlayerModelLib
             string key = player.PlayerUID + ":" + errorCode;
             lock (_disallowedLock)
             {
-                if (_lastDisallowedMsgMs.TryGetValue(key, out long last) && now - last < 1500) return;
+                if (_lastDisallowedMsgMs.TryGetValue(key, out long last) && now - last < 500) return;
                 _lastDisallowedMsgMs[key] = now;
                 if (_lastDisallowedMsgMs.Count > 256) EvictStaleErrorMsgs(now);
             }
@@ -319,6 +319,7 @@ namespace PlayerModelLib
             foreach (CollectibleObject coll in api.World.Collectibles)
             {
                 string code = coll.Code != null ? coll.Code.ToString() : "";
+                bool isOvhArmor = OvhWearPermissionsPatches.IsActive && OvhWearPermissionsPatches.IsCombatOverhaulArmor(coll);
                 EnumCharacterDressType dress = EnumCharacterDressType.Unknown;
                 bool dressResolved = false;
                 foreach (string entry in entries)
@@ -326,6 +327,11 @@ namespace PlayerModelLib
                     if (string.IsNullOrEmpty(entry)) continue;
                     if (entry.StartsWith("type:", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (isOvhArmor && (entry.Equals("type:all", StringComparison.OrdinalIgnoreCase) || entry.Equals("type:armor", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            target.Add(coll.Id);
+                            break;
+                        }
                         if (!dressResolved) { dress = GetWearDressType(api, coll); dressResolved = true; }
                         if (MatchesWearType(dress, entry)) { target.Add(coll.Id); break; }
                     }
@@ -375,8 +381,7 @@ namespace PlayerModelLib
 
         public bool IsInteractAllowed(EntityPlayer player, CollectibleObject coll)
         {
-            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
-            if (!IsItemRelevant(coll.Id)) return true;
+            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || !IsItemRelevant(coll.Id)) return true;
             return IsInteractAllowed(player, coll, GetPlayerTraitCodes(player));
         }
 
@@ -411,8 +416,7 @@ namespace PlayerModelLib
 
         public bool IsAttackAllowed(EntityPlayer player, CollectibleObject coll)
         {
-            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
-            if (!IsItemRelevant(coll.Id)) return true;
+            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || !IsItemRelevant(coll.Id)) return true;
             return IsAttackAllowed(player, coll, GetPlayerTraitCodes(player));
         }
 
@@ -452,8 +456,7 @@ namespace PlayerModelLib
 
         public bool IsWearAllowed(EntityPlayer player, CollectibleObject coll)
         {
-            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions) return true;
-            if (!IsWearRelevant(coll.Id)) return true;
+            if (PlayerModelModSystem.Settings.DisableClassItemRestrictions || !IsWearRelevant(coll.Id)) return true;
             return IsWearAllowed(player, coll, GetPlayerTraitCodes(player));
         }
 

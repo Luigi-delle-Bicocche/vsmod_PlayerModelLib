@@ -73,6 +73,7 @@ namespace PlayerModelLib
         internal static EntityPlayer? ResolveCharacterSlotOwner(ItemSlot? slot)
         {
             InventoryBase? inv = slot?.Inventory;
+            if (inv == null) return null;
             ICoreAPI api = inv.Api;
             if (api is ICoreClientAPI capi) return capi.World?.Player?.Entity;
             if (api is ICoreServerAPI sapi)
@@ -107,12 +108,11 @@ namespace PlayerModelLib
             return false;
         }
 
-        internal static bool TryBlockWear(ICoreAPI api, CollectibleObject? coll, Func<EntityPlayer?> resolveOwner, bool feedback)
+        internal static bool IsWearAllowed(ICoreAPI api, CollectibleObject? coll, Func<EntityPlayer?> resolveOwner, bool feedback)
         {
             if (coll == null) return true;
             TraitItemPermissionsSystem? inst = api.ModLoader.GetModSystem<TraitItemPermissionsSystem>();
-            if (inst == null) return true;
-            if (!inst.IsWearRelevant(coll.Id)) return true;
+            if (inst == null || !inst.IsWearRelevant(coll.Id)) return true;
             EntityPlayer? player = resolveOwner();
             if (player == null || inst.IsWearAllowed(player, coll, inst.GetPlayerTraitCodes(player))) return true;
             if (feedback) TraitItemPermissionsSystem.SendWearDisallowed(player);
@@ -123,7 +123,7 @@ namespace PlayerModelLib
         {
             CollectibleObject? coll = itemstackFromSourceSlot?.Itemstack?.Collectible;
             ICoreAPI api = __instance.Inventory.Api;
-            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
+            if (!IsWearAllowed(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
             return true;
         }
 
@@ -131,7 +131,7 @@ namespace PlayerModelLib
         {
             CollectibleObject? coll = sourceSlot?.Itemstack?.Collectible;
             ICoreAPI api = __instance.Inventory.Api;
-            if (!TryBlockWear(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
+            if (!IsWearAllowed(api, coll, () => ResolveCharacterSlotOwner(__instance), false)) { __result = false; return false; }
             return true;
         }
 
@@ -139,9 +139,8 @@ namespace PlayerModelLib
         {
             CollectibleObject? coll = slot?.Itemstack?.Collectible;
             EntityPlayer? player = byEntity as EntityPlayer;
-            if (player == null) return true;
-            if (IsNonSelfDressInteract(byEntity, blockSel, entitySel)) return true;
-            if (!TryBlockWear(player.Api, coll, () => player, true)) { handHandling = EnumHandHandling.PreventDefault; handling = EnumHandling.PreventSubsequent; return false; }
+            if (player == null || IsNonSelfDressInteract(byEntity, blockSel, entitySel)) return true;
+            if (!IsWearAllowed(player.Api, coll, () => player, true)) { handHandling = EnumHandHandling.PreventDefault; handling = EnumHandling.PreventSubsequent; return false; }
             return true;
         }
         
